@@ -1,5 +1,8 @@
 # Twin-in-the-Loop rApp on a Virtual RIC
 
+**[Run it in Colab](https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb)** &middot; **[Live console page](https://ysrao.github.io/twin-in-the-loop-rapp/rapp-run.html)** &middot; **[Landing page](https://ysrao.github.io/twin-in-the-loop-rapp/)**
+
+
 Twin-gated RAN optimisation as an rApp on a standalone Virtual RIC (a software
 Non-RT RIC and its rApps running outside an SMO, connected to the RAN/OSS over
 open interfaces). A Sionna RT digital twin scores every candidate change
