@@ -79,16 +79,11 @@ def trace_tower(ply_path, tx_pos, rx_pts, samples=500_000, seed=41,
     departure angles (the reusable twin state)."""
     import mitsuba as mi
     if mi.variant() is None:
-        # Only choose a variant when none is active, and prefer the GPU
-        # variant on GPU hosts: forcing LLVM on a CUDA machine leaves
-        # Sionna RT's itu-radio-material plugin unregistered there.
-        try:
-            import torch
-            mi.set_variant("cuda_ad_mono_polarized"
-                           if torch.cuda.is_available()
-                           else "llvm_ad_mono_polarized")
-        except Exception:
-            pass
+        # Only choose a variant when none is active (importing sionna.rt
+        # normally picks one). Same order as Sionna RT: NVIDIA GPU, then
+        # the Apple-silicon GPU (Metal), then the LLVM CPU backend.
+        mi.set_variant("cuda_ad_mono_polarized", "metal_ad_mono_polarized",
+                       "llvm_ad_mono_polarized")
     from sionna.rt import (load_scene, Transmitter, Receiver,
                            PlanarArray, PathSolver)
     with open(scene_xml, "w") as f:
@@ -123,22 +118,39 @@ def trace_tower(ply_path, tx_pos, rx_pts, samples=500_000, seed=41,
     a = np.abs(np.array(paths.a)) ** 2
     if a.ndim == 6:            # leading axis: field components
         a = a.sum(axis=0)
-    gain = a[:, 0, 0, 0, :]                       # [rx, paths]
-    phi = np.degrees(np.array(paths.phi_t)[:, 0, 0, 0, :])
-    theta = np.degrees(np.array(paths.theta_t)[:, 0, 0, 0, :])
+    # float64: GPU backends return float32, where the 1e-300 floor used
+    # in scoring underflows to 0 (log10 warnings on path-less receivers)
+    gain = a[:, 0, 0, 0, :].astype(np.float64)    # [rx, paths]
+    phi = np.degrees(np.array(paths.phi_t)[:, 0, 0, 0, :].astype(np.float64))
+    theta = np.degrees(np.array(paths.theta_t)[:, 0, 0, 0, :].astype(np.float64))
     return {"gain": gain, "phi": phi, "theta": theta, "rx": rx_pts,
             "trace_s": time.time() - t0, "samples": samples}
 
 
+TARGET_TBLER = 0.1          # link-adaptation target (10% first-tx BLER)
+
+
+def highest_mcs(thresholds, sinr_db):
+    """Highest MCS index whose decode threshold the SINR meets; -1 where
+    none does. Works for any threshold order (MCS rows without a BLER
+    table carry +inf), unlike searchsorted, which needs a sorted array."""
+    s = np.asarray(sinr_db, dtype=float)
+    ok = s[..., None] >= np.asarray(thresholds)[None, :]
+    n = ok.shape[-1]
+    return np.where(ok.any(axis=-1), n - 1 - np.argmax(ok[..., ::-1], axis=-1), -1)
+
+
 def calibrate_link_curve():
     """Spectral efficiency vs SINR from Sionna SYS PHYAbstraction:
-    per MCS, the lowest SINR with a successful decode at 2000 RE, and
-    the decoded bits per RE at high SINR."""
+    per MCS, the lowest SINR whose transport BLER meets the 10% target
+    at 2000 RE, and the transport-block bits per RE. PHYAbstraction
+    takes the effective SINR in LINEAR scale; the TBLER output is used
+    (not the sampled HARQ ACK), so the curve is the same on every run."""
     import torch
     from sionna.sys import PHYAbstraction
     phy = PHYAbstraction()
     n_re = 2000
-    sinr_grid = np.arange(-10.0, 36.0, 1.0)
+    sinr_grid = np.arange(-10.0, 36.0, 0.5)
     mcs_rows, sinr_rows = [], []
     for m in range(28):
         for s in sinr_grid:
@@ -146,23 +158,21 @@ def calibrate_link_curve():
             sinr_rows.append(s)
     mcs_t = torch.tensor(np.array(mcs_rows).reshape(1, -1, 1),
                          dtype=torch.int32)
-    sinr_t = torch.tensor(np.array(sinr_rows).reshape(1, -1, 1),
-                          dtype=torch.float32)
+    sinr_t = torch.tensor(10.0 ** (np.array(sinr_rows).reshape(1, -1, 1) / 10.0),
+                          dtype=torch.float32)          # dB -> linear
     re_t = torch.full((1, len(mcs_rows), 1), float(n_re))
     out = phy(mcs_t, sinr_eff=sinr_t, num_allocated_re=re_t)
     # PHYAbstraction outputs may live on a GPU device; bring them home
     # before NumPy conversion (a no-op on CPU hosts).
-    bits = np.array(out[0].detach().cpu()).flatten()
-    success = np.array(out[1].detach().cpu()).flatten() > 0
-    bits = bits.reshape(28, len(sinr_grid))
-    success = success.reshape(28, len(sinr_grid))
+    bits = np.array(out[0].detach().cpu()).reshape(28, len(sinr_grid))
+    tbler = np.array(out[3].detach().cpu()).reshape(28, len(sinr_grid))
     thresholds = np.full(28, np.inf)
     bits_per_re = np.zeros(28)
     for m in range(28):
-        ok = np.where(success[m])[0]
+        ok = np.where(np.isfinite(tbler[m]) & (tbler[m] <= TARGET_TBLER))[0]
         if len(ok):
             thresholds[m] = sinr_grid[ok[0]]
-            bits_per_re[m] = bits[m, -1] / n_re
+            bits_per_re[m] = bits[m].max() / n_re    # TB bits on an ACK
     return thresholds, bits_per_re
 
 
@@ -194,7 +204,7 @@ class TwinScorer:
         return np.stack(out, axis=1)
 
     def se_of_sinr(self, sinr_db):
-        idx = np.searchsorted(self.thresholds, sinr_db, side="right") - 1
+        idx = highest_mcs(self.thresholds, sinr_db)
         return np.where(idx >= 0, self.bits_per_re[np.clip(idx, 0, 27)], 0.0)
 
     def score(self, config, traffic_weights):

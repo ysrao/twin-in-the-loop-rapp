@@ -55,8 +55,7 @@ def receiver_sinr(scorer, config):
 def reference_mcs(scorer, sinr_db):
     """Highest MCS whose PHY decode threshold the SINR meets;
     -1 where no MCS decodes."""
-    idx = np.searchsorted(scorer.thresholds, sinr_db, side="right") - 1
-    return idx  # -1 .. 27
+    return twin_mod.highest_mcs(scorer.thresholds, sinr_db)  # -1 .. 27
 
 
 def rule_mcs(scorer, sinr_db, olla_offset_db, mcs_cap):

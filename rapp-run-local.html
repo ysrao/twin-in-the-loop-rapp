@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run the rApp v4 (Mac)</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:920px;margin:0 auto;padding:24px 18px 60px;color:#222;line-height:1.5}
+h1{font-size:24px;margin-bottom:4px}
+h2{font-size:19px;margin-top:32px;border-bottom:2px solid #2e9e44;padding-bottom:4px}
+.sub{color:#555;margin-top:0}
+button,a.btn{font-size:15px;padding:9px 16px;margin:4px 6px 4px 0;border:1px solid #999;border-radius:8px;background:#f4f4f4;cursor:pointer;color:#222;text-decoration:none;display:inline-block;font-family:inherit;line-height:1.3}
+button.sel{background:#2e9e44;color:#fff;border-color:#2e9e44}
+button.big,a.btn.big{background:#2e9e44;color:#fff;border-color:#2e9e44;font-size:16px;padding:11px 20px}
+table{border-collapse:collapse;margin:10px 0 16px;width:100%}
+th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:14px}
+th{background:#f0f0f0}
+textarea{width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;padding:8px;border:1px solid #bbb;border-radius:6px}
+.note{color:#555;font-size:14px}
+.box{border:1px solid #ccc;border-radius:8px;padding:12px 18px;margin:14px 0;background:#fafafa}
+.warn{border-color:#c98a00;background:#fff8e6}
+.hidden{display:none}
+.msg{font-size:14px;margin:6px 0}
+.msg.err{color:#b3261e}
+.msg.ok{color:#2e7d32}
+.msg.wrn{color:#8a5a00}
+canvas{border:1px solid #ccc;border-radius:6px;max-width:100%}
+button:disabled{opacity:.55;cursor:not-allowed}
+button:focus-visible,a.btn:focus-visible{outline:3px solid #1a6fd1;outline-offset:2px}
+#results{margin-top:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+.chip{font-size:12.5px;padding:3px 9px;border-radius:999px;border:1px solid #2e9e44;color:#1d6d2e;background:#eef8f0}
+.chip.keep{border-color:#999;color:#444;background:#f2f2f2}
+.runinfo{font-size:13px;color:#555}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.up{color:#1d6d2e;font-weight:600}td.down{color:#b3261e;font-weight:600}
+tr.chosen td{background:#eef8f0;font-weight:600}
+.legend{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#444;margin-top:6px}
+.legend canvas{border:none;border-radius:2px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #2e9e44;border-right-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.spin{animation:none}}
+.tablewrap{overflow-x:auto}
+pre.log{white-space:pre-wrap;font-size:12px;background:#f6f6f6;border:1px solid #ddd;border-radius:6px;padding:10px;max-height:340px;overflow:auto}
+.maps{display:flex;gap:18px;flex-wrap:wrap}
+.maps figure{margin:0}
+.maps figcaption{font-size:14px;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<h1>Run the rApp <span style="font-size:15px;color:#2e7d32;font-weight:600">v4 · runs on this Mac</span></h1>
+<p class="sub"><b>Twin-in-the-Loop Optimisation as an rApp on a Virtual RIC</b> — the working companion to the full description (v4). This page is the Virtual RIC console: choose the run, press <b>Run on this Mac</b>, and the rApp executes it here with <b>Sionna RT (on the Mac GPU) and Sionna SYS</b> through the twin gate (§9 of the description). The result appears at the bottom of the page: the recommended changes with the before &rarr; after performance.</p>
+<p class="msg wrn hidden" id="serverWarn"></p>
+
+<h2>Step 1 — Single tower or cluster, and the existing radio configuration</h2>
+<button id="mode-single" onclick="setMode('single')">Single tower — Tower B</button>
+<button id="mode-cluster" onclick="setMode('cluster')">Cluster — Towers A + B + C</button>
+<p class="note">Or load your own site file (same format as the site database export): <input type="file" id="sitesFile" accept=".csv,text/csv"></p>
+<textarea id="sitesCsv" rows="5"></textarea>
+<p class="note" id="sitesInfo"></p>
+<p class="msg wrn hidden" id="sitesWarn"></p>
+<p class="note hidden" id="unknownOptWrap"><label><input type="checkbox" id="allowDefaults"> Proceed anyway with default terrain height (0 m) and equal &frac13; sector shares for the unknown sites</label></p>
+<h3>Existing radio configuration (as-is)</h3>
+<div id="configTable"></div>
+<p class="note">What the optimiser may change, per §11 of the description: azimuth (search around current headings), electrical tilt (0–10&deg;), transmit power (&plusmn;2 dB), slice PRB shares, OLLA offset (&plusmn;4 dB, action threshold 1 dB). The MCS cap is reported, never silently changed.</p>
+
+<h2>Step 2 — Network counters (ingested)</h2>
+<div class="box">
+<p style="margin-top:0">In deployment the Virtual RIC collects the SMO/OSS PM export automatically each cycle and parses the standard counters itself — the operator does not type them. Here the study network's recorded counters are pre-loaded; load your own export to replace them. <span class="note" id="counterSource">(Counters: the study network's recorded values. MCS histograms: Tower B recorded, Towers A and C dummy test files — the schema is the contract)</span></p>
+<p><span class="note">Test counters:</span> <button class="cntbtn sel" id="cnt-0" onclick="pickCounters(0)">Recorded (default)</button><button class="cntbtn" id="cnt-1" onclick="pickCounters(1)">Test counters 1 — Busy hour, congested</button><button class="cntbtn" id="cnt-2" onclick="pickCounters(2)">Test counters 2 — Night, low load</button><button class="cntbtn" id="cnt-3" onclick="pickCounters(3)">Test counters 3 — Edge coverage hole</button><button class="cntbtn" id="cnt-4" onclick="pickCounters(4)">Test counters 4 — URLLC-heavy slice</button></p>
+<p><label class="note" for="countersFile">Counters CSV:</label> <input type="file" id="countersFile" accept=".csv,text/csv"> <span class="note" id="counterSummary"></span></p>
+<p><label class="note" for="pmFile">PM MCS-histogram CSV (for the audit):</label> <input type="file" id="pmFile" accept=".csv,text/csv"> <span class="note" id="pmSummary">Columns: site_id, sector (1-3), mcs (0-27), grant_share, olla_offset_db, mcs_cap — one or several towers per file. In force: Tower B (recorded, <code>data/test_pm_mcs.csv</code>) and dummy test histograms for Towers A and C (<code>data/test_pm_mcs_tower_A.csv</code>, <code>_C.csv</code>; all three in <code>data/test_pm_mcs_all_towers.csv</code>).</span></p>
+<p><label class="note" for="linkFile">Link PM daily counters CSV (BLER, HARQ, rank, power control, load):</label> <input type="file" id="linkFile" accept=".csv,text/csv"> <label class="note" for="linkCfgFile">cell config CSV:</label> <input type="file" id="linkCfgFile" accept=".csv,text/csv"> <span class="note" id="linkSummary">In force: dummy counters for Towers A, B, C, 18 Aug – 18 Oct 2026 (<code>data/pm_synth/pm_daily_counters.csv</code> + <code>site_config.csv</code>).</span></p>
+<p class="msg err hidden" id="linkWarn"></p>
+<p class="msg err hidden" id="pmWarn"></p>
+<p class="msg err hidden" id="counterWarn"></p>
+<details><summary class="note">Counters and PM histograms in force (inspect / what-if edit)</summary>
+<textarea id="countersCsv" rows="12"></textarea>
+<textarea id="histJson" rows="5"></textarea>
+</details>
+</div>
+
+<h2>Step 3 — Select the function, hand the run to the twin</h2>
+<button class="fnbtn" id="fn-capacity" onclick="selectFn('capacity')">Capacity</button>
+<button class="fnbtn" id="fn-slice" onclick="selectFn('slice')">Slice / PRB</button>
+<button class="fnbtn" id="fn-energy" onclick="selectFn('energy')">Energy</button>
+<button class="fnbtn" id="fn-audit" onclick="selectFn('audit')">Audit</button>
+<button class="fnbtn" id="fn-all" onclick="selectFn('all')">All functions</button>
+<p>
+<button class="big" id="runBtn" onclick="runHere()" disabled>Run on this Mac</button>
+<button class="big" id="colabBtn" onclick="runOnColab()">Run on Colab notebook</button>
+<span class="note" id="runState"></span>
+</p>
+<p class="msg hidden" id="pkgMsg"></p>
+<details><summary class="note">The run package (what the button sends to the runner; copy it to run in the notebook instead)</summary>
+<p><button onclick="copyPackage()">Copy the package</button></p>
+<textarea id="pkgText" rows="12" readonly style="width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px"></textarea>
+</details>
+
+
+<div class="box warn">
+<b>How the run works, honestly.</b> The optimisation itself — the ray-traced twin, the SYS link curve and slice environment, the guarded search, the audit's histogram fit — is the prototypes' own code: the button sends the run package to the local runner, which executes <code>notebook/rapp_run.ipynb</code> with it on this Mac (Sionna RT on the GPU, Sionna SYS) and returns what the twin verified. The page itself only prepares the run and draws the result. Nothing is emitted unless it passes the twin gate; a run that finds nothing worth changing says so and keeps the as-built configuration.
+</div>
+
+<h2 id="resultsHead">Result</h2>
+<div id="results"><p class="note">No run yet. Choose the mode and the function above, then press <b>Run on this Mac</b>. A run takes about 10 seconds.</p></div>
+
+<footer>
+<p class="note">Artefact v4 (local, Mac) &middot; 16 Nov 2026 &middot; Full description: <i>Twin-in-the-Loop Optimisation as an rApp on a Virtual RIC</i>, v4, Nov 2026. <a href="index.html">Landing page</a></p>
+</footer>
+
+<script>
+var SITES_DEFAULT = "site,x_m,y_m,height_m,azimuths_deg,tilts_deg,power_offset_db,traffic_share\n" +
+"A,-250,250,30,90;210;330,7.9;6.45;10,0,0.30\n" +
+"B,250,250,30,90;210;330,10;0.97;3.92,0,0.40\n" +
+"C,0,-250,30,90;210;330,7.59;7.68;3.23,0,0.30\n";
+var COUNTERS_DEFAULT = "kpi,value\n" +
+"coverage_pct,39.5\nmedian_rsrp_dbm,-101.6\nmedian_sinr_db,7.7\nspectral_efficiency,2.08\n" +
+"median_dl_mbps,38\nmedian_ul_mbps,11\nedge_dl_mbps,6.5\nedge_ul_mbps,2.0\nfairness,0.41\n" +
+"prb_util_pct,81\nsignalling_load,34\ncell_load,0.75\nshares_embb,0.60\nshares_urllc,0.20\nshares_mmtc,0.20\n" +
+"low_traffic_hours,6\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\n" +
+"audit_offset_sector1_db,-1.5\naudit_offset_sector2_db,-2.5\naudit_offset_sector3_db,-2.75\n";
+var HIST_DEFAULT = "{\"0\":[0.0,0.0,0.0,0.0,0.0,0.04395,0.0,0.0,0.0,0.0,0.0219,0.0,0.06445,0.0,0.0,0.0203,0.17165,0.0444,0.2833,0.0,0.3042,0.04585,0.0,0.0,0.0,0.0,0.0,0.0],\"1\":[0.0,0.0,0.0,0.0,0.0,0.02455,0.0,0.0,0.0,0.0,0.0,0.0,0.09245,0.0,0.0,0.0466,0.04535,0.069,0.21025,0.0,0.2549,0.2569,0.0,0.0,0.0,0.0,0.0,0.0],\"2\":[0.0,0.0,0.0,0.0,0.0,0.0381,0.0,0.0,0.0,0.0,0.0,0.0,0.0777,0.0,0.0,0.11125,0.07655,0.07875,0.11735,0.0,0.2711,0.194,0.0352,0.0,0.0,0.0,0.0,0.0]}";
+var STUDY = {
+  A: {gz: -12.67, cur: [0.38, 0.34, 0.28], proj: [0.34, 0.33, 0.33]},
+  B: {gz: -64.75, cur: [0.40, 0.35, 0.25], proj: [0.34, 0.30, 0.36]},
+  C: {gz: -38.89, cur: [0.36, 0.33, 0.31], proj: [0.32, 0.32, 0.36]}
+};
+// Counters the run package needs (the others are informational).
+var REQUIRED_COUNTERS = ['median_dl_mbps','median_ul_mbps','edge_dl_mbps','edge_ul_mbps','fairness','prb_util_pct',
+  'signalling_load','cell_load','low_traffic_hours','carriers_per_site','shares_embb','shares_urllc','shares_mmtc'];
+var PM_SITE_KEY = 'B';   // the recorded MCS histograms belong to Tower B; A and C have dummy test histograms
+var PM_EXTRA_DEFAULT = {"A": {"gnb_configured": {"olla_offset_db": 0.0, "mcs_cap": 24}, "mcs_histograms_by_sector": {"0": [0.0, 4e-05, 0.00016, 0.00051, 0.00148, 0.0038, 0.00875, 0.01801, 0.03318, 0.05471, 0.08072, 0.10656, 0.12589, 0.13308, 0.12589, 0.10656, 0.08072, 0.05471, 0.03318, 0.01801, 0.00875, 0.0038, 0.00148, 0.0, 0.0, 0.0, 0.0, 0.0], "1": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1e-05, 6e-05, 0.00027, 0.00104, 0.00344, 0.00973, 0.02346, 0.04819, 0.08437, 0.12586, 0.16, 0.17333, 0.16, 0.12586, 0.08437, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "2": [0.0, 0.0, 0.01567, 0.02664, 0.04174, 0.06027, 0.08021, 0.09837, 0.11118, 0.11581, 0.11118, 0.09837, 0.08021, 0.06027, 0.04174, 0.02664, 0.01567, 0.0085, 0.00425, 0.00195, 0.00083, 0.00032, 0.00012, 4e-05, 0.0, 0.0, 0.0, 0.0]}}, "C": {"gnb_configured": {"olla_offset_db": -1.0, "mcs_cap": 24}, "mcs_histograms_by_sector": {"0": [0.0, 0.0, 0.0, 0.0, 4e-05, 0.00016, 0.00051, 0.00148, 0.0038, 0.00875, 0.01801, 0.03318, 0.05471, 0.08072, 0.10656, 0.12589, 0.13308, 0.12589, 0.10656, 0.08072, 0.05471, 0.03318, 0.01801, 0.00875, 0.0038, 0.00148, 0.0, 0.0], "1": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1e-05, 6e-05, 0.00027, 0.00104, 0.00344, 0.00973, 0.02346, 0.04819, 0.08437, 0.12586, 0.16, 0.17333, 0.16, 0.12586, 0.08437, 0.0, 0.0, 0.0], "2": [0.0, 0.0, 0.0, 0.0, 0.0, 0.01567, 0.02664, 0.04174, 0.06027, 0.08021, 0.09837, 0.11118, 0.11581, 0.11118, 0.09837, 0.08021, 0.06027, 0.04174, 0.02664, 0.01567, 0.0085, 0.00425, 0.00195, 0.00083, 0.00032, 0.00012, 4e-05, 0.0]}}};
+// MCS histograms in force, keyed by tower letter: {A: {gnb_configured, mcs_histograms_by_sector}, B: ..., C: ...}
+function pmDefault(){
+  var o = JSON.parse(JSON.stringify(PM_EXTRA_DEFAULT));
+  o.B = {gnb_configured: {olla_offset_db: 0, mcs_cap: 24}, mcs_histograms_by_sector: JSON.parse(HIST_DEFAULT)};
+  return {A: o.A, B: o.B, C: o.C};
+}
+var LINK_PM = [{"site_id": "sf-twin-tower-A", "sectors": {"1": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 54.615, "user_dl_tput_mbps": 24.625, "avg_cqi": 8.5, "avg_dl_mcs": 14.85, "dl_bler_initial_pct": 16.435, "dl_bler_residual_pct": 1.285, "harq_dl_retx_rate_pct": 19.145, "harq_dl_avg_tx": 1.18, "ul_bler_initial_pct": 9.58, "dl_rank1_pct": 26.0, "dl_avg_rank": 2.24, "ul_sinr_avg_db": 11.4, "ul_phr_avg_db": 15.2, "ul_phr_negative_pct": 9.15, "pusch_tx_power_avg_dbm": 9.2}, "congested_days_pct": 0.0}, "2": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 56.525, "user_dl_tput_mbps": 26.415, "avg_cqi": 8.7, "avg_dl_mcs": 15.25, "dl_bler_initial_pct": 21.19, "dl_bler_residual_pct": 2.225, "harq_dl_retx_rate_pct": 25.68, "harq_dl_avg_tx": 1.239, "ul_bler_initial_pct": 9.405, "dl_rank1_pct": 25.65, "dl_avg_rank": 2.23, "ul_sinr_avg_db": 11.0, "ul_phr_avg_db": 14.85, "ul_phr_negative_pct": 8.05, "pusch_tx_power_avg_dbm": 8.8}, "congested_days_pct": 0.0}, "3": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 56.535, "user_dl_tput_mbps": 24.405, "avg_cqi": 8.55, "avg_dl_mcs": 15.0, "dl_bler_initial_pct": 16.0, "dl_bler_residual_pct": 1.4, "harq_dl_retx_rate_pct": 18.555, "harq_dl_avg_tx": 1.175, "ul_bler_initial_pct": 9.63, "dl_rank1_pct": 26.2, "dl_avg_rank": 2.23, "ul_sinr_avg_db": 11.15, "ul_phr_avg_db": 14.65, "ul_phr_negative_pct": 8.3, "pusch_tx_power_avg_dbm": 9.2}, "congested_days_pct": 0.0}}}, {"site_id": "sf-twin-tower-B", "sectors": {"1": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 83.495, "user_dl_tput_mbps": 10.12, "avg_cqi": 10.4, "avg_dl_mcs": 18.25, "dl_bler_initial_pct": 10.385, "dl_bler_residual_pct": 0.345, "harq_dl_retx_rate_pct": 11.46, "harq_dl_avg_tx": 1.111, "ul_bler_initial_pct": 9.415, "dl_rank1_pct": 30.5, "dl_avg_rank": 2.09, "ul_sinr_avg_db": 11.3, "ul_phr_avg_db": 14.85, "ul_phr_negative_pct": 9.5, "pusch_tx_power_avg_dbm": 9.35}, "congested_days_pct": 46.8}, "2": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 88.51, "user_dl_tput_mbps": 9.365, "avg_cqi": 10.4, "avg_dl_mcs": 18.1, "dl_bler_initial_pct": 10.215, "dl_bler_residual_pct": 0.34, "harq_dl_retx_rate_pct": 11.26, "harq_dl_avg_tx": 1.109, "ul_bler_initial_pct": 9.425, "dl_rank1_pct": 29.7, "dl_avg_rank": 2.095, "ul_sinr_avg_db": 10.9, "ul_phr_avg_db": 14.4, "ul_phr_negative_pct": 9.1, "pusch_tx_power_avg_dbm": 9.35}, "congested_days_pct": 74.2}, "3": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 84.875, "user_dl_tput_mbps": 9.26, "avg_cqi": 10.4, "avg_dl_mcs": 18.3, "dl_bler_initial_pct": 9.91, "dl_bler_residual_pct": 0.38, "harq_dl_retx_rate_pct": 10.89, "harq_dl_avg_tx": 1.105, "ul_bler_initial_pct": 9.535, "dl_rank1_pct": 30.55, "dl_avg_rank": 2.1, "ul_sinr_avg_db": 10.4, "ul_phr_avg_db": 14.45, "ul_phr_negative_pct": 9.45, "pusch_tx_power_avg_dbm": 9.3}, "congested_days_pct": 50.0}}}, {"site_id": "sf-twin-tower-C", "sectors": {"1": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -96.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 54.135, "user_dl_tput_mbps": 26.59, "avg_cqi": 11.3, "avg_dl_mcs": 19.9, "dl_bler_initial_pct": 10.04, "dl_bler_residual_pct": 0.34, "harq_dl_retx_rate_pct": 11.045, "harq_dl_avg_tx": 1.107, "ul_bler_initial_pct": 13.815, "dl_rank1_pct": 65.25, "dl_avg_rank": 1.47, "ul_sinr_avg_db": 6.05, "ul_phr_avg_db": 3.4, "ul_phr_negative_pct": 33.9, "pusch_tx_power_avg_dbm": 19.4}, "congested_days_pct": 0.0}, "2": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -96.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 55.405, "user_dl_tput_mbps": 28.07, "avg_cqi": 11.35, "avg_dl_mcs": 19.65, "dl_bler_initial_pct": 9.8, "dl_bler_residual_pct": 0.35, "harq_dl_retx_rate_pct": 10.755, "harq_dl_avg_tx": 1.104, "ul_bler_initial_pct": 16.62, "dl_rank1_pct": 68.2, "dl_avg_rank": 1.44, "ul_sinr_avg_db": 4.65, "ul_phr_avg_db": 1.6, "ul_phr_negative_pct": 40.8, "pusch_tx_power_avg_dbm": 19.3}, "congested_days_pct": 0.0}, "3": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -96.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 54.46, "user_dl_tput_mbps": 24.635, "avg_cqi": 11.3, "avg_dl_mcs": 19.95, "dl_bler_initial_pct": 9.905, "dl_bler_residual_pct": 0.365, "harq_dl_retx_rate_pct": 10.89, "harq_dl_avg_tx": 1.105, "ul_bler_initial_pct": 14.17, "dl_rank1_pct": 65.4, "dl_avg_rank": 1.48, "ul_sinr_avg_db": 6.05, "ul_phr_avg_db": 3.8, "ul_phr_negative_pct": 31.8, "pusch_tx_power_avg_dbm": 19.6}, "congested_days_pct": 0.0}}}];
+var LINK_METRICS = ['prb_util_dl_pct','user_dl_tput_mbps','avg_cqi','avg_dl_mcs','dl_bler_initial_pct','dl_bler_residual_pct',
+  'harq_dl_retx_rate_pct','harq_dl_avg_tx','ul_bler_initial_pct','dl_rank1_pct','dl_avg_rank','ul_sinr_avg_db','ul_phr_avg_db','ul_phr_negative_pct','pusch_tx_power_avg_dbm'];
+var LINK_CFG_TEXT = null, LINK_PM_TEXT = null;
+function csvRows(t){ var L = t.trim().split(/\r?\n/).filter(function(l){ return l.trim(); }); var h = L.shift().split(',').map(function(x){ return x.trim(); });
+  return L.map(function(l){ var c = l.split(','), o = {}; h.forEach(function(k, i){ o[k] = (c[i] || '').trim(); }); return o; }); }
+function median(a){ a = a.slice().sort(function(x, y){ return x - y; }); var n = a.length; return n ? (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2) : null; }
+function aggregateLink(pmText, cfgText){
+  var pm = csvRows(pmText), cfg = csvRows(cfgText), out = {};
+  var needP = LINK_METRICS.concat(['site_id','sector','cell_congested']), needC = ['site_id','sector','dl_bler_target_pct','p0_nominal_pusch_dbm','pusch_alpha','mimo_layers_max'];
+  var mp = needP.filter(function(k){ return !(k in (pm[0] || {})); }), mc = needC.filter(function(k){ return !(k in (cfg[0] || {})); });
+  if (mp.length) throw new Error('daily counters CSV is missing ' + mp.join(', '));
+  if (mc.length) throw new Error('cell config CSV is missing ' + mc.join(', '));
+  cfg.forEach(function(r){ var e = out[r.site_id] = out[r.site_id] || {site_id: r.site_id, sectors: {}};
+    e.sectors[r.sector] = {config: {dl_bler_target_pct: +r.dl_bler_target_pct, p0_nominal_pusch_dbm: +r.p0_nominal_pusch_dbm, pusch_alpha: +r.pusch_alpha, mimo_layers_max: parseInt(r.mimo_layers_max, 10)}}; });
+  Object.keys(out).forEach(function(sid){ Object.keys(out[sid].sectors).forEach(function(sec){
+    var rs = pm.filter(function(r){ return r.site_id === sid && r.sector === sec; }), d = out[sid].sectors[sec];
+    if (!rs.length) throw new Error('no daily counters for ' + sid + ' sector ' + sec);
+    d.days = rs.length; d.median = {};
+    LINK_METRICS.forEach(function(k){ d.median[k] = +median(rs.map(function(r){ return +r[k]; })).toFixed(3); });
+    d.congested_days_pct = +(100 * rs.filter(function(r){ return +r.cell_congested === 1; }).length / rs.length).toFixed(1); }); });
+  return Object.keys(out).map(function(k){ return out[k]; });
+}
+function loadLink(){
+  showMsg('linkWarn', '');
+  if (!LINK_PM_TEXT || !LINK_CFG_TEXT) { $('linkSummary').textContent = 'Loaded one of the two files; load the ' + (LINK_PM_TEXT ? 'cell config' : 'daily counters') + ' CSV too.'; return; }
+  try { LINK_PM = aggregateLink(LINK_PM_TEXT, LINK_CFG_TEXT);
+    $('linkSummary').textContent = 'Loaded: ' + LINK_PM.map(function(e){ return e.site_id.replace('sf-twin-tower-', 'Tower '); }).join(', ') + '.'; refreshPkgText(); }
+  catch (e) { showMsg('linkWarn', 'Link counters not loaded: ' + e.message + '.', 'err'); }
+}
+function pmInForce(){ try { return JSON.parse($('histJson').value) || {}; } catch (e) { return null; } }
+var MODE = 'single', FN = 'capacity', RESULT = null;
+
+function $(id){ return document.getElementById(id); }
+function esc(s){
+  return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function(ch){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+  });
+}
+function showMsg(id, text, kind){
+  var el = $(id);
+  if (!text) { el.className = 'msg hidden'; el.textContent = ''; return; }
+  el.className = 'msg ' + (kind || 'err'); el.textContent = text;
+}
+function num(v){ return (typeof v === 'number' && isFinite(v)) ? v : null; }
+
+function setMode(m){
+  MODE = m;
+  $('mode-single').className = (m === 'single') ? 'sel' : '';
+  $('mode-cluster').className = (m === 'cluster') ? 'sel' : '';
+  renderConfig();
+}
+function selectFn_(f){
+  FN = f;
+  ['capacity','slice','energy','audit','all'].forEach(function(x){ $('fn-' + x).className = 'fnbtn' + (x === f ? ' sel' : ''); });
+  renderConfig();
+}
+function parseSites(){
+  var lines = $('sitesCsv').value.trim().split(/\r?\n+/).slice(1), out = [];
+  lines.forEach(function(ln){
+    var c = ln.split(',');
+    if (c.length < 8) return;
+    var key = c[0].trim().toUpperCase();
+    out.push({ key: key, name: c[0].trim(), x: +c[1], y: +c[2], h: +c[3],
+      az: c[4].split(';').map(Number), tilt: c[5].split(';').map(Number),
+      power: +c[6], traffic: +c[7] });
+  });
+  return out;
+}
+function activeSites(){
+  var s = parseSites();
+  if (MODE === 'single') {
+    var b = s.filter(function(v){ return v.key === 'B'; });
+    return b.length ? b : s.slice(0, 1);
+  }
+  return s;
+}
+function siteIssues(s){
+  var unknown = s.filter(function(v){ return !STUDY[v.key]; }).map(function(v){ return v.name; });
+  var pm = pmInForce() || {};
+  var noPm = s.filter(function(v){ return !pm[v.key]; }).map(function(v){ return v.name; });
+  return { unknown: unknown, hasPm: noPm.length < s.length, noPm: noPm };
+}
+function renderConfig_(){
+  var s = activeSites();
+  $('sitesInfo').textContent = s.length + (MODE === 'single' ? ' site in force (single-tower mode)' : ' sites in force (cluster mode)') + '.';
+  var iss = siteIssues(s), w = [];
+  if (iss.unknown.length)
+    w.push('No study terrain or sector-share data for site(s) ' + iss.unknown.join(', ') +
+      '. The package would use ground height 0 m and equal ⅓ shares, which is wrong for the San Francisco terrain.');
+  if (iss.noPm.length)
+    w.push('No MCS histograms are in force for Tower(s) ' + iss.noPm.join(', ') +
+      (iss.hasPm ? ' — the audit skips them.' : (FN === 'audit' ? ' — the audit cannot run on this site set.' : '; the audit function will not be valid.')));
+  if (w.length) { $('sitesWarn').textContent = w.join(' '); $('sitesWarn').className = 'msg wrn'; }
+  else $('sitesWarn').className = 'msg wrn hidden';
+  $('unknownOptWrap').className = iss.unknown.length ? 'note' : 'note hidden';
+
+  var h = '<table><tr><th>Site</th><th>Sector</th><th>Azimuth (deg)</th><th>Tilt (deg)</th><th>Site power offset (dB)</th></tr>';
+  s.forEach(function(v){
+    for (var i = 0; i < 3; i++)
+      h += '<tr>' + (i === 0 ? '<td rowspan="3">' + esc(v.name) + ' (' + esc(v.x) + ', ' + esc(v.y) + '), ' + esc(v.h) + ' m</td>' : '') +
+           '<td>' + (i + 1) + '</td><td>' + esc(v.az[i]) + '</td><td>' + esc(v.tilt[i]) + '</td>' +
+           (i === 0 ? '<td rowspan="3">' + esc(v.power) + '</td>' : '') + '</tr>';
+  });
+  $('configTable').innerHTML = h + '</table>';
+}
+function parseCounters(){
+  var o = {};
+  $('countersCsv').value.trim().split(/\r?\n+/).slice(1).forEach(function(ln){
+    var i = ln.lastIndexOf(','); if (i < 0) return;
+    o[ln.slice(0, i).trim()] = parseFloat(ln.slice(i + 1));
+  });
+  return o;
+}
+function missingCounters(c){
+  return REQUIRED_COUNTERS.filter(function(k){ return num(c[k]) === null; });
+}
+function counterSummary_(){
+  var c = parseCounters();
+  function show(v, u){ return num(v) === null ? '—' : v + (u || ''); }
+  $('counterSummary').textContent = 'In force: coverage ' + show(c.coverage_pct, '%') + ', median RSRP ' + show(c.median_rsrp_dbm, ' dBm') +
+    ', fairness ' + show(c.fairness) + ', PRB utilisation ' + show(c.prb_util_pct, '%') + '.';
+  var miss = missingCounters(c);
+  if (miss.length) { $('counterWarn').textContent = 'Missing or non-numeric counters needed by the run: ' + miss.join(', ') + '.'; $('counterWarn').className = 'msg err'; }
+  else $('counterWarn').className = 'msg err hidden';
+}
+function buildPackage(){
+  var c = parseCounters();
+  var miss = missingCounters(c);
+  if (miss.length) throw new Error('Missing or non-numeric counters: ' + miss.join(', ') + '.');
+  var active = activeSites();
+  if (!active.length) throw new Error('No valid site rows (each row needs 8 comma-separated fields).');
+  var iss = siteIssues(active);
+  if (iss.unknown.length && !$('allowDefaults').checked)
+    throw new Error('Unknown site(s) ' + iss.unknown.join(', ') + ' — tick “Proceed anyway” in Step 1 to use defaults, or use the study sites.');
+  var pmAll;
+  try { pmAll = JSON.parse($('histJson').value) || {}; }
+  catch (e) { throw new Error('The MCS histogram text is not valid JSON: ' + e.message); }
+  if ((FN === 'audit' || FN === 'all') && !iss.hasPm)
+    throw new Error('The audit needs MCS histograms for at least one active tower; none are in force for ' + iss.noPm.join(', ') + '.');
+
+  var sites = active.map(function(v){
+    var st = STUDY[v.key] || {gz: 0, cur: [1/3, 1/3, 1/3], proj: null};
+    return { site_id: 'sf-twin-tower-' + v.key, label: 'Tower ' + v.name,
+      position_enu_m: [v.x, v.y], ground_z_m: st.gz, height_m_agl: v.h,
+      azimuths_deg: v.az, tilts_deg: v.tilt, power_offset_db: v.power,
+      traffic_shares_current: st.cur, eval_half_m: 150, eval_step_m: 20, _traffic: v.traffic, _proj: st.proj };
+  });
+  var totals = {}, proj = {};
+  sites.forEach(function(s){ totals[s.site_id] = s._traffic; proj[s.site_id] = s._proj || s.traffic_shares_current; });
+  if (MODE === 'single') {
+    totals = {};
+    totals[sites[0].site_id] = 1.0;
+  }
+  // MCS histograms for every active tower that has them (Tower B first: the recorded one).
+  var pmSites = active.filter(function(v){ return pmAll[v.key]; })
+    .sort(function(a, b){ return (a.key === PM_SITE_KEY ? -1 : 0) - (b.key === PM_SITE_KEY ? -1 : 0); })
+    .map(function(v){ var e = pmAll[v.key];
+      return { site_id: 'sf-twin-tower-' + v.key, gnb_configured: e.gnb_configured, mcs_histograms_by_sector: e.mcs_histograms_by_sector }; });
+  if (!pmSites.length) pmSites = [{ site_id: 'sf-twin-tower-' + PM_SITE_KEY, gnb_configured: pmDefault().B.gnb_configured,
+                                    mcs_histograms_by_sector: pmDefault().B.mcs_histograms_by_sector }];
+  return { mode: MODE, function: FN,
+    sites: sites.map(function(s){ var t = Object.assign({}, s); delete t._traffic; delete t._proj; return t; }),
+    site_traffic_totals: totals,
+    // Contract kept as before: a list in single mode, keyed by site_id in cluster mode.
+    policy: { traffic_shares_projected: (MODE === 'single' ? (sites[0]._proj || sites[0].traffic_shares_current) : proj),
+              min_coverage_delta_pts: 0.0, max_edge_drop_db: 1.0 },
+    counters: { median_dl: c.median_dl_mbps, median_ul: c.median_ul_mbps, edge_dl: c.edge_dl_mbps,
+      edge_ul: c.edge_ul_mbps, fairness: c.fairness, prb_util: c.prb_util_pct, signalling: c.signalling_load,
+      load: c.cell_load, low_hours: c.low_traffic_hours, carriers_per_site: c.carriers_per_site,
+      current_shares: [c.shares_embb, c.shares_urllc, c.shares_mmtc] },
+    pm: pmSites[0],
+    pm_sites: pmSites,
+    link_pm: LINK_PM.filter(function(e){ return active.some(function(v){ return e.site_id === 'sf-twin-tower-' + v.key; }); }) };
+}
+
+// Saving: inside a Claude artifact use the downloads capability; on a normal web host fall back to a link download.
+function refreshPkgText(){
+  var t = $('pkgText'); if (!t) return;
+  try { t.value = "PACKAGE_JSON = r'''" + String.fromCharCode(10) + JSON.stringify(buildPackage(), null, 1) + String.fromCharCode(10) + "'''"; }
+  catch(e){ t.value = '(the package cannot be built yet: ' + e.message + ')'; }
+}
+// Colab path: copy this run's package, then open the runner notebook on Colab.
+var COLAB_URL = 'https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb';
+function runOnColab(){
+  try { buildPackage(); } catch (e) { showMsg('pkgMsg', 'Cannot run yet: ' + e.message, 'err'); return; }
+  copyPackage('Package copied and Colab opened in a new tab. In the notebook, click the second cell (the package cell), select all (Cmd/Ctrl+A), paste, then Runtime → Run all. The result prints in the last cell.');
+  window.open(COLAB_URL, '_blank', 'noopener');
+}
+function copyPackage(okText){
+  refreshPkgText();
+  var t = $('pkgText');
+  t.focus(); t.select();
+  function done(){ showMsg('pkgMsg', (typeof okText === 'string') ? okText : 'Copied — in the notebook click the second cell, select all (Cmd/Ctrl+A) and paste over it, then Run all. The result prints in the last cell.', 'ok'); }
+  function fail(){ showMsg('pkgMsg', 'Copy failed — click in the box, select all (Ctrl/Cmd+A) and copy manually.', 'err'); }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t.value).then(done, function(){ try { document.execCommand('copy'); done(); } catch(e){ fail(); } });
+  } else {
+    try { document.execCommand('copy'); done(); } catch(e){ fail(); }
+  }
+}
+function fmt(v, d){ return (v === null || v === undefined || v === '' || !isFinite(v)) ? '—' : (+v).toFixed(d === undefined ? 1 : d); }
+function fmt0(v){ return fmt(v, 0); }
+function signed(v, d){ var s = fmt(v, d); return (s !== '—' && +v > 0) ? '+' + s : s; }
+function arr(v){ return Array.isArray(v) ? v : []; }
+function siteLabel(sid){ return esc(String(sid).replace('sf-twin-tower-', 'Tower ')); }
+
+function readFile(input, target, cb){
+  var f = input.files[0]; if (!f) return;
+  var rd = new FileReader();
+  rd.onload = function(){ if (target) $(target).value = rd.result; if (cb) cb(rd.result, f.name); };
+  rd.readAsText(f);
+}
+$('sitesCsv').value = SITES_DEFAULT;
+$('countersCsv').value = COUNTERS_DEFAULT;
+$('histJson').value = JSON.stringify(pmDefault());
+$('sitesFile').addEventListener('change', function(){ readFile(this, 'sitesCsv', renderConfig); });
+$('countersFile').addEventListener('change', function(){
+  readFile(this, 'countersCsv', function(t, name){
+    markCounters(-1);
+    $('counterSource').textContent = '(Counters: loaded from ' + name + '. MCS histograms: Tower B recorded, Towers A and C dummy test files — edit below to replace)';
+    counterSummary();
+  });
+});
+
+// ---- built-in test counter sets (menu in Step 2) ----
+var TEST_COUNTERS = [{"name": "counters_busy_hour_congested.csv", "label": "Busy hour, congested", "csv": "kpi,value\ncoverage_pct,36.2\nmedian_rsrp_dbm,-103.4\nmedian_sinr_db,5.1\nspectral_efficiency,1.62\nmedian_dl_mbps,22\nmedian_ul_mbps,6.5\nedge_dl_mbps,3.1\nedge_ul_mbps,0.9\nfairness,0.33\nprb_util_pct,94\nsignalling_load,58\ncell_load,0.92\nshares_embb,0.70\nshares_urllc,0.15\nshares_mmtc,0.15\nlow_traffic_hours,4\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\naudit_offset_sector1_db,-2.0\naudit_offset_sector2_db,-3.0\naudit_offset_sector3_db,-3.25\n"}, {"name": "counters_night_low_load.csv", "label": "Night, low load", "csv": "kpi,value\ncoverage_pct,41.8\nmedian_rsrp_dbm,-100.9\nmedian_sinr_db,11.3\nspectral_efficiency,2.74\nmedian_dl_mbps,96\nmedian_ul_mbps,28\nedge_dl_mbps,18.5\nedge_ul_mbps,5.2\nfairness,0.62\nprb_util_pct,18\nsignalling_load,9\ncell_load,0.20\nshares_embb,0.50\nshares_urllc,0.20\nshares_mmtc,0.30\nlow_traffic_hours,10\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\naudit_offset_sector1_db,-1.0\naudit_offset_sector2_db,-1.5\naudit_offset_sector3_db,-1.75\n"}, {"name": "counters_edge_coverage_hole.csv", "label": "Edge coverage hole", "csv": "kpi,value\ncoverage_pct,31.0\nmedian_rsrp_dbm,-108.2\nmedian_sinr_db,4.2\nspectral_efficiency,1.48\nmedian_dl_mbps,27\nmedian_ul_mbps,7\nedge_dl_mbps,1.8\nedge_ul_mbps,0.5\nfairness,0.28\nprb_util_pct,72\nsignalling_load,31\ncell_load,0.68\nshares_embb,0.60\nshares_urllc,0.20\nshares_mmtc,0.20\nlow_traffic_hours,6\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\naudit_offset_sector1_db,-1.5\naudit_offset_sector2_db,-3.5\naudit_offset_sector3_db,-2.5\n"}, {"name": "counters_urllc_heavy_slice.csv", "label": "URLLC-heavy slice", "csv": "kpi,value\ncoverage_pct,40.1\nmedian_rsrp_dbm,-101.2\nmedian_sinr_db,8.4\nspectral_efficiency,2.15\nmedian_dl_mbps,34\nmedian_ul_mbps,14\nedge_dl_mbps,5.9\nedge_ul_mbps,2.4\nfairness,0.45\nprb_util_pct,77\nsignalling_load,47\ncell_load,0.71\nshares_embb,0.40\nshares_urllc,0.45\nshares_mmtc,0.15\nlow_traffic_hours,5\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\naudit_offset_sector1_db,-1.25\naudit_offset_sector2_db,-2.0\naudit_offset_sector3_db,-2.25\n"}];
+function markCounters(n){ for (var i = 0; i <= TEST_COUNTERS.length; i++){ var b = $("cnt-" + i); if (b) b.className = "cntbtn" + (i === n ? " sel" : ""); } }
+function pickCounters(n){
+  var t = n === 0 ? null : TEST_COUNTERS[n - 1];
+  $("countersCsv").value = t ? t.csv : COUNTERS_DEFAULT;
+  $("countersFile").value = "";
+  $("counterSource").textContent = t ? "(Counters: Test counters " + n + " — " + t.label + " (" + t.name + "), dummy values. MCS histograms: Tower B recorded, Towers A and C dummy test files)"
+    : "(Counters: the study network's recorded values. MCS histograms: Tower B recorded, Towers A and C dummy test files — the schema is the contract)";
+  markCounters(n); counterSummary();
+}
+$('sitesCsv').addEventListener('input', renderConfig);
+$('allowDefaults').addEventListener('change', function(){ showMsg('pkgMsg', ''); });
+$('countersCsv').addEventListener('input', counterSummary);
+$('histJson').addEventListener('input', renderConfig);
+function renderConfig(){ renderConfig_(); refreshPkgText(); }
+function counterSummary(){ counterSummary_(); refreshPkgText(); }
+function selectFn(f){ selectFn_(f); refreshPkgText(); }
+
+// ---- PM CSV -> MCS histograms + configured OLLA offset / MCS cap ----------
+function setCounter(key, val){
+  var lines = $('countersCsv').value.trim().split(/\r?\n/), found = false;
+  for (var i = 1; i < lines.length; i++)
+    if (lines[i].slice(0, lines[i].lastIndexOf(',')).trim() === key){ lines[i] = key + ',' + val; found = true; }
+  if (!found) lines.push(key + ',' + val);
+  $('countersCsv').value = lines.join('\n') + '\n';
+}
+function loadPmCsv(text, name){
+  showMsg('pmWarn', '');
+  try {
+    var rows = text.trim().split(/\r?\n/).filter(function(l){ return l.trim(); });
+    var head = rows.shift().split(',').map(function(h){ return h.trim(); });
+    var need = ['site_id','sector','mcs','grant_share','olla_offset_db','mcs_cap'];
+    var miss = need.filter(function(k){ return head.indexOf(k) < 0; });
+    if (miss.length) throw new Error('missing column(s) ' + miss.join(', '));
+    var ix = {}; head.forEach(function(h, i){ ix[h] = i; });
+    var bySite = {};
+    rows.forEach(function(l, n){
+      var c = l.split(','), sid = c[ix.site_id].trim(), m0 = /^sf-twin-tower-([A-Za-z0-9]+)$/.exec(sid);
+      if (!m0) throw new Error('row ' + (n + 2) + ': site_id must look like sf-twin-tower-A / -B / -C; it is ' + sid);
+      var key = m0[1].toUpperCase(), sec = parseInt(c[ix.sector], 10) - 1, mcs = parseInt(c[ix.mcs], 10), v = parseFloat(c[ix.grant_share]);
+      if (!(sec >= 0 && sec <= 2) || !(mcs >= 0 && mcs <= 27) || !isFinite(v))
+        throw new Error('row ' + (n + 2) + ': sector must be 1-3, mcs 0-27 and grant_share a number');
+      var e = bySite[key];
+      if (!e) { e = bySite[key] = {h: {'0': [], '1': [], '2': []}, olla: parseFloat(c[ix.olla_offset_db]), cap: parseInt(c[ix.mcs_cap], 10)};
+                for (var s = 0; s < 3; s++) for (var m = 0; m < 28; m++) e.h[String(s)].push(0); }
+      e.h[String(sec)][mcs] += v;
+    });
+    var pm = pmInForce() || pmDefault(), keys = Object.keys(bySite).sort();
+    keys.forEach(function(key){
+      var e = bySite[key];
+      ['0','1','2'].forEach(function(k){
+        var t = e.h[k].reduce(function(a, b){ return a + b; }, 0);
+        if (!(t > 0)) throw new Error('no grants for Tower ' + key + ' sector ' + (+k + 1));
+        e.h[k] = e.h[k].map(function(x){ return +(x / t).toFixed(6); });
+      });
+      pm[key] = {gnb_configured: {olla_offset_db: isFinite(e.olla) ? e.olla : 0, mcs_cap: isFinite(e.cap) ? e.cap : 24}, mcs_histograms_by_sector: e.h};
+      if (key === PM_SITE_KEY) { if (isFinite(e.olla)) setCounter('olla_offset_db', e.olla); if (isFinite(e.cap)) setCounter('mcs_cap', e.cap); }
+    });
+    $('histJson').value = JSON.stringify(pm);
+    $('pmSummary').textContent = 'Loaded ' + name + ': ' + rows.length + ' rows for Tower ' + keys.join(', ') + '. Histograms in force: Tower ' + Object.keys(pm).sort().join(', ') + '.';
+    renderConfig(); counterSummary();
+  } catch (e) {
+    showMsg('pmWarn', 'PM CSV ' + name + ' not loaded: ' + e.message + '.', 'err');
+  }
+}
+$('pmFile').addEventListener('change', function(){ readFile(this, null, loadPmCsv); });
+$('linkFile').addEventListener('change', function(){ readFile(this, null, function(t){ LINK_PM_TEXT = t; loadLink(); }); });
+$('linkCfgFile').addEventListener('change', function(){ readFile(this, null, function(t){ LINK_CFG_TEXT = t; loadLink(); }); });
+
+// ---- the local runner ------------------------------------------------------
+function checkServer(){
+  fetch('/api/ping', {cache: 'no-store'}).then(function(r){ return r.json(); }).then(function(j){
+    if (j && j.ok) { $('runBtn').disabled = false; showMsg('serverWarn', ''); }
+  }).catch(function(){
+    $('runBtn').disabled = true;
+    showMsg('serverWarn', 'The local runner is not running, so the Run button is off. Start it by double-clicking “Run rApp v4” on your Desktop; it opens this page with the button on.', 'wrn');
+  });
+}
+var _tick = null;
+function runHere(given){
+  var pkg = (given && typeof given === 'object' && given.sites) ? given : null;
+  if (!pkg) {
+    try { pkg = buildPackage(); }
+    catch (e) { showMsg('pkgMsg', 'Cannot run yet: ' + e.message, 'err'); return; }
+  }
+  showMsg('pkgMsg', '');
+  var btn = $('runBtn'), t0 = Date.now();
+  btn.disabled = true;
+  var label = {capacity:'Capacity', slice:'Slice / PRB', energy:'Energy', audit:'Audit', all:'All functions'}[FN];
+  $('runState').innerHTML = '<span class="spin"></span>Running ' + esc(label) + ' (' + esc(MODE) + ') on this Mac… <span id="el">0</span> s';
+  _tick = setInterval(function(){ var e = $('el'); if (e) e.textContent = Math.round((Date.now() - t0) / 1000); }, 500);
+  fetch('/api/run', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(pkg)})
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if (!j.ok) {
+        $('results').innerHTML = '<p class="msg err">The run stopped: ' + esc(j.error) + '</p>' +
+          (j.log ? '<details><summary class="note">Run log</summary><pre class="log">' + esc(j.log) + '</pre></details>' : '');
+        $('runState').textContent = 'Run failed after ' + fmt(j.seconds) + ' s.';
+      } else {
+        RESULT = j.result; renderResult(j.result, j.log);
+        $('runState').textContent = 'Done in ' + fmt(j.seconds) + ' s — result below.';
+      }
+      $('resultsHead').scrollIntoView({behavior: 'smooth', block: 'start'});
+    })
+    .catch(function(e){
+      $('results').innerHTML = '<p class="msg err">Could not reach the local runner (' + esc(e.message) + '). Is the “Run rApp v4” window still open?</p>';
+      $('runState').textContent = '';
+    })
+    .then(function(){ clearInterval(_tick); btn.disabled = false; checkServer(); });
+}
+
+// ---- result rendering ------------------------------------------------------
+function turbo(t){
+  t = Math.max(0, Math.min(1, t));
+  var r = 34.61 + t*(1172.33 + t*(-10793.56 + t*(33300.12 + t*(-38394.49 + t*14825.05))));
+  var g = 23.31 + t*(557.33 + t*(1225.33 + t*(-3574.96 + t*(1073.77 + t*707.56))));
+  var b = 27.2 + t*(3211.1 + t*(-15327.97 + t*(27814 + t*(-22569.18 + t*6838.66))));
+  function c(v){ return Math.max(0, Math.min(255, Math.round(v))); }
+  return 'rgb(' + c(r) + ',' + c(g) + ',' + c(b) + ')';
+}
+var VMIN = -140, VMAX = -60;
+function drawMap(cv, maps, key){
+  var dpr = window.devicePixelRatio || 1, W = 330, H = 330, pad = 34;
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  var g = cv.getContext('2d'); g.scale(dpr, dpr);
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  var xs = maps.x, ys = maps.y, vs = maps[key];
+  var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+  var span = Math.max(x1 - x0, y1 - y0) || 1, ins = 8, sc = (W - pad - 10 - 2 * ins) / span;
+  function X(x){ return pad + ins + (x - x0) * sc; } function Y(y){ return H - pad - ins - (y - y0) * sc; }
+  g.strokeStyle = '#ddd'; g.fillStyle = '#555'; g.font = '10px -apple-system,Segoe UI,sans-serif'; g.lineWidth = 1;
+  [0, 0.5, 1].forEach(function(f){
+    var vx = x0 + f * span, vy = y0 + f * span;
+    g.beginPath(); g.moveTo(X(vx), pad - 6); g.lineTo(X(vx), H - pad); g.stroke();
+    g.beginPath(); g.moveTo(pad, Y(vy)); g.lineTo(W - 6, Y(vy)); g.stroke();
+    g.textAlign = 'center'; g.fillText(Math.round(vx), X(vx), H - pad + 13);
+    g.textAlign = 'right'; g.fillText(Math.round(vy), pad - 4, Y(vy) + 3);
+  });
+  g.textAlign = 'center'; g.fillText('x (m)', W / 2, H - 4);
+  var r = Math.max(2.5, Math.min(ins - 1, 0.42 * sc * (span / Math.sqrt(xs.length))));
+  for (var i = 0; i < xs.length; i++){
+    var v = vs[i];
+    g.beginPath(); g.arc(X(xs[i]), Y(ys[i]), r, 0, 2 * Math.PI);
+    if (v === null) { g.strokeStyle = '#bbb'; g.stroke(); continue; }
+    g.fillStyle = turbo((v - VMIN) / (VMAX - VMIN)); g.fill();
+  }
+}
+function legend(){
+  var cv = document.createElement('canvas'), w = 180, h = 10, dpr = window.devicePixelRatio || 1;
+  cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  var g = cv.getContext('2d'); g.scale(dpr, dpr);
+  for (var i = 0; i < w; i++){ g.fillStyle = turbo(i / (w - 1)); g.fillRect(i, 0, 1, h); }
+  var d = document.createElement('div'); d.className = 'legend';
+  d.innerHTML = '<span>' + VMIN + '</span>'; d.appendChild(cv);
+  d.insertAdjacentHTML('beforeend', '<span>' + VMAX + ' dBm per RE (best-server RSRP; open circle = no path)</span>');
+  return d;
+}
+function auditsOf(R){ return (R.audits && R.audits.length) ? R.audits : (R.audit ? [R.audit] : []); }
+function provenance(R){
+  var p = [];
+  if (R.provenance) p.push(R.provenance);
+  if (R.slice) p.push(R.slice.provenance);
+  var AU = auditsOf(R);
+  if (AU.length) p.push(AU.some(function(a){ return (a.sectors || []).some(function(s){ return s.recommendation; }); }) ? 'mcs_audit_guarded_accept' : 'mcs_audit_no_action_within_tolerance');
+  if (R.link_audits && R.link_audits.length) p.push('link_audit_counter_rules');
+  if (R.energy) p.push('energy_anchored_estimate');
+  return p;
+}
+function renderResult(R, log){
+  var h = '', fnLabel = {capacity:'Capacity', slice:'Slice / PRB', energy:'Energy', audit:'MCS audit', all:'All functions'}[R.function] || R.function;
+  h += '<p class="runinfo">' + esc(fnLabel) + ' &middot; ' + (R.mode === 'cluster' ? 'cluster (Towers A + B + C)' : 'single tower (Tower B)') +
+       ' &middot; Sionna RT backend: ' + esc(R.run && R.run.backend && R.run.backend.indexOf('metal') === 0 ? 'the Apple GPU (Metal)' : (R.run && R.run.backend) || '—') +
+       ' &middot; ' + fmt(R.run && R.run.seconds) + ' s</p>';
+  h += '<div class="chips">' + provenance(R).map(function(p){
+    return '<span class="chip' + (/keep|reject|no_action|no_improvement/.test(p) ? ' keep' : '') + '">' + esc(p) + '</span>'; }).join('') + '</div>';
+  var ch = arr(R.changes);
+  h += '<h3>Recommended changes</h3>' + (ch.length ? '<ul>' + ch.map(function(c){ return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>'
+        : '<p class="note">None: nothing passed the twin gate, so the as-built configuration is kept.</p>');
+  var kb = R.kpis_before, ka = R.kpis_after;
+  if (kb && ka){
+    var rows = [['Coverage (%)','coverage_pct',1,1],['Median RSRP (dBm)','median_rsrp',1,1],['Edge RSRP p5 (dBm)','edge_rsrp_p5',1,1],
+                ['Median SINR (dB)','median_sinr',1,1],['Path availability (%)','path_pct',1,1],['Weighted SE (bit/s/Hz)','capacity_weighted_se',2,1]];
+    h += '<h3>Before &rarr; after (twin-verified, projected traffic)</h3><div class="tablewrap"><table><tr><th>KPI</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr>';
+    rows.forEach(function(r){
+      var b = kb[r[1]], a = ka[r[1]], d = (num(a) !== null && num(b) !== null) ? a - b : null;
+      var cls = d === null || Math.abs(d) < 1e-9 ? '' : (d * r[3] > 0 ? 'up' : 'down');
+      h += '<tr><td>' + r[0] + '</td><td class="num">' + fmt(b, r[2]) + '</td><td class="num">' + fmt(a, r[2]) + '</td><td class="num ' + cls + '">' + signed(d, r[2]) + '</td></tr>';
+    });
+    h += '</table></div>';
+    if (R.per_site_served_coverage){
+      h += '<h3>Coverage by serving site (%)</h3><div class="tablewrap"><table><tr><th>Site</th><th class="num">Before</th><th class="num">After</th></tr>';
+      Object.keys(R.per_site_served_coverage).forEach(function(s){
+        var v = R.per_site_served_coverage[s]; h += '<tr><td>' + siteLabel(s) + '</td><td class="num">' + fmt(v.before) + '</td><td class="num">' + fmt(v.after) + '</td></tr>'; });
+      h += '</table></div>';
+    }
+  }
+  if (R.maps) h += '<h3>Best-server RSRP map</h3><div class="maps"><figure><canvas id="mapB"></canvas><figcaption>Before (as built)</figcaption></figure><figure><canvas id="mapA"></canvas><figcaption>After (recommended)</figcaption></figure></div><div id="legendSlot"></div>';
+  if (R.slice){
+    var S = R.slice;
+    h += '<h3>Slice / PRB</h3><p>Profile <b>' + esc(S.current_profile) + '</b> &rarr; <b>' + esc(S.chosen_profile) + '</b>' +
+         (S.current_profile === S.chosen_profile ? ' (kept: no profile beat it within the edge-throughput and fairness guardrails)' : '') +
+         '. Reward from the ingested counters with the existing shares: ' + fmt(S.counters_reward, 2) + '.</p>';
+    h += '<div class="tablewrap"><table><tr><th>Profile</th><th>PRB shares eMBB / URLLC / mMTC</th><th>Scheduler</th><th class="num">Median DL</th><th class="num">Edge DL</th><th class="num">Fairness</th><th class="num">Twin reward</th><th></th></tr>';
+    arr(S.profiles).forEach(function(q){
+      var tag = q.name === S.chosen_profile ? 'chosen' : (q.name === S.current_profile ? 'existing' : '');
+      h += '<tr' + (q.name === S.chosen_profile ? ' class="chosen"' : '') + '><td>' + esc(q.name) + '</td><td>' + arr(q.shares).map(function(v){ return fmt(v, 2); }).join(' / ') +
+           '</td><td>' + esc(q.scheduler) + '</td><td class="num">' + fmt(q.kpis[0]) + '</td><td class="num">' + fmt(q.kpis[2]) + '</td><td class="num">' + fmt(q.kpis[4], 2) +
+           '</td><td class="num">' + fmt(q.reward, 2) + '</td><td>' + tag + '</td></tr>';
+    });
+    h += '</table></div>';
+  }
+  auditsOf(R).forEach(function(A){
+    h += '<h3>MCS / OLLA audit — ' + siteLabel(A.site) + '</h3><div class="tablewrap"><table><tr><th>Sector</th><th class="num">PM mean MCS</th><th class="num">Twin MCS</th><th class="num">Fitted offset (dB)</th><th class="num">Fit L1</th><th>Recommendation</th><th class="num">SE gain</th></tr>';
+    arr(A.sectors).forEach(function(s, i){
+      var rec = s.recommendation;
+      h += '<tr><td>' + (i + 1) + '</td><td class="num">' + fmt(s.pm_mean_mcs) + '</td><td class="num">' + fmt(s.twin_mean_mcs) + '</td><td class="num">' + signed(s.estimated_effective_offset_db, 2) +
+           '</td><td class="num">' + fmt(s.histogram_l1_distance, 2) + (s.histogram_l1_distance > 0.5 ? ' <span class="note">(low confidence)</span>' : '') + '</td><td>' +
+           (rec ? 'OLLA ' + signed(rec.olla_offset_adjustment_db, 2) + ' dB' + (s.cap_binding ? ', MCS cap &rarr; ' + esc(rec.mcs_cap) : '') : 'no action') +
+           '</td><td class="num">' + signed(100 * s.se_gain_relative) + '%</td></tr>';
+    });
+    h += '</table></div><p class="note">Lower L1 = better histogram fit; above about 0.5 the fitted offset is not reliable.</p>';
+  });
+  if (R.link_audits && R.link_audits.length){
+    h += '<h3>Link audit — BLER / HARQ, MIMO, UL power control, load</h3><p class="note">Counter-based checks on the daily PM medians (not twin-verified). Where the measured BLER is above target, the BLER-based OLLA change replaces any MCS-histogram OLLA change on that cell.</p>';
+    R.link_audits.forEach(function(L){
+      h += '<h4>' + siteLabel(L.site) + '</h4><div class="tablewrap"><table><tr><th>Sector</th><th>Area</th><th>Severity</th><th>Evidence (daily median)</th><th>Recommendation</th></tr>';
+      arr(L.cells).forEach(function(c){
+        if (!c.findings.length) h += '<tr><td>' + c.sector + '</td><td colspan="4">within limits</td></tr>';
+        c.findings.forEach(function(x){
+          h += '<tr><td>' + c.sector + '</td><td>' + esc(x.area) + '</td><td>' + (x.severity === 'high' ? '<b>high</b>' : esc(x.severity)) + '</td><td>' + esc(x.evidence) + '</td><td>' + esc(x.recommendation) + '</td></tr>';
+        });
+      });
+      h += '</table></div>';
+    });
+  }
+  if (R.energy){
+    var E = R.energy;
+    h += '<h3>Energy</h3><p>Energy index <b>' + fmt(E.index_before, 0) + ' &rarr; ' + fmt(E.index_after) + '</b> (estimated saving ' + fmt(E.saving_pct) +
+         '%, anchored on the RANOpt energy validation over the low-traffic hours; an estimate, not a twin trace).</p><ul>' +
+         arr(E.plan).map(function(p){ return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>';
+  }
+  arr(R.notes).forEach(function(n){ h += '<p class="note">' + esc(n) + '</p>'; });
+  if (log) h += '<details><summary class="note">Run log (what the runner printed)</summary><pre class="log">' + esc(log) + '</pre></details>';
+  $('results').innerHTML = h;
+  if (R.maps){ drawMap($('mapB'), R.maps, 'before'); drawMap($('mapA'), R.maps, 'after'); $('legendSlot').appendChild(legend()); }
+}
+
+setMode('single');
+selectFn('capacity');
+counterSummary();
+checkServer();
+refreshPkgText();
+
+// ---- hand-off from the published artifact -----------------------------------
+// The artifact opens this page as  rapp-run-local.html#pkg=<base64 JSON package>
+// (the hash never leaves the browser). Run that exact package as soon as the runner answers.
+(function(){
+  var m = /[#&]pkg=([^&]+)/.exec(location.hash || '');
+  if (!m) return;
+  var pkg;
+  try { pkg = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); }
+  catch (e) { showMsg('pkgMsg', 'The run sent from the artifact could not be read: ' + e.message, 'err'); return; }
+  history.replaceState(null, '', location.pathname);
+  if (pkg.mode) setMode(pkg.mode);
+  if (pkg['function']) selectFn(pkg['function']);
+  var tries = 0;
+  (function go(){
+    fetch('/api/ping', {cache: 'no-store'}).then(function(r){ return r.json(); }).then(function(j){
+      if (!(j && j.ok)) throw new Error('no runner');
+      $('runBtn').disabled = false; showMsg('serverWarn', '');
+      showMsg('pkgMsg', 'Running the package sent from the artifact (mode: ' + pkg.mode + ', function: ' + pkg['function'] + ').', 'ok');
+      runHere(pkg);
+    }).catch(function(){ if (++tries < 20) setTimeout(go, 1500); });
+  })();
+})();
+</script>
+</body>
+</html>

@@ -2,6 +2,8 @@
 
 **[Run it in Colab](https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb)** &middot; **[Live console page](https://ysrao.github.io/twin-in-the-loop-rapp/rapp-run.html)** &middot; **[Landing page](https://ysrao.github.io/twin-in-the-loop-rapp/)**
 
+**[v4 - Mac run, results saved](https://github.com/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run_v4_mac.ipynb)** (`notebook/rapp_run_v4_mac.ipynb`: the notebook as run on an Apple M3 GPU, MODE single, FUNCTION all, with every cell's output and the result in the last cell; [open in Colab](https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run_v4_mac.ipynb))
+
 
 Twin-gated RAN optimisation as an rApp on a standalone Virtual RIC (a software
 Non-RT RIC and its rApps running outside an SMO, connected to the RAN/OSS over
@@ -24,6 +26,31 @@ all; the result prints in the last cell:
 - `FUNCTION` - "capacity", "slice", "energy", "audit" or "all"
 - `COUNTER_SET` - "study", "test1", "test2", "test3", or "operator" (your own
   counter dump, edited into `OPERATOR_COUNTERS`)
+
+### On a Mac (Apple-silicon GPU)
+
+Sionna RT ray-traces on the Apple GPU through Mitsuba's Metal backend (the
+notebook prints `ray tracing on: Apple GPU (Metal)`). Run it from a clone of
+this repository, so it uses the clone's modules and scene:
+
+```bash
+git clone https://github.com/ysrao/twin-in-the-loop-rapp.git
+cd twin-in-the-loop-rapp
+python3 -m venv .venv && source .venv/bin/activate
+pip install "sionna-rt==2.2.0" "sionna==2.2.0" trimesh rtree matplotlib jupyter
+jupyter notebook notebook/rapp_run.ipynb
+```
+
+Python 3.11 or newer. On an M3 a full `FUNCTION = "all"` run takes about
+15 s (about 1 s per tower trace).
+
+**Console page with a Run button (local only).** `rapp-run-local.html` is the
+console page with a *Run on this Mac* button: it sends the run package to a
+small local runner (`local/rapp_server.py`), which executes the notebook with
+it and draws the result - changes, before/after numbers, maps, slice, audit
+and energy tables - at the bottom of the page. Start it with
+`.venv/bin/python local/rapp_server.py` (it opens
+`http://127.0.0.1:8765/rapp-run-local.html`). It listens on this Mac only.
 
 The study network (a San Francisco 1 km tile, three towers, recorded
 counters) and the open city scene are built in. The console page

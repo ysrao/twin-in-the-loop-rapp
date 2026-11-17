@@ -92,33 +92,40 @@ class SysCellEnv:
         self.gain = np.stack([
             _sector_gain_db((self.user_az - az + 180) % 360 - 180)
             for az in SECTORS_DEG], axis=1)  # [user, sector]
+        # Seed Sionna's own RNGs (HARQ draws) so a run is reproducible
+        from sionna.phy import config as _sn_config
+        _sn_config.seed = seed
         self.phy_abs = PHYAbstraction()
         self.mcs_thresholds = self._calibrate_mcs_thresholds()
 
     def _calibrate_mcs_thresholds(self) -> np.ndarray:
         """Link-adaptation table calibrated from Sionna SYS itself:
-        for each MCS index, the lowest SINR (dB) at which PHYAbstraction
-        reports a successful decode. One batched SYS call."""
-        sinr_grid = np.arange(-10.0, 35.5, 1.0, dtype=np.float32)
+        for each MCS index, the lowest SINR (dB) at which PHYAbstraction's
+        transport BLER meets the 10% target. One batched SYS call; the
+        SINR goes in linear scale, as PHYAbstraction expects."""
+        sinr_grid = np.arange(-10.0, 35.5, 0.5, dtype=np.float32)
         mcs_rows, sinr_rows = [], []
         for m in range(28):
             mcs_rows.append(np.full(len(sinr_grid), m, dtype=np.int32))
             sinr_rows.append(sinr_grid)
         mcs_t = torch.tensor(np.concatenate(mcs_rows).reshape(1, -1, 1))
-        sinr_t = torch.tensor(np.concatenate(sinr_rows).reshape(1, -1, 1))
+        sinr_t = torch.tensor(10.0 ** (np.concatenate(sinr_rows).reshape(1, -1, 1) / 10.0))
         re_t = torch.full((1, len(mcs_t.flatten()), 1), 2000.0)
         out = self.phy_abs(mcs_t, sinr_eff=sinr_t, num_allocated_re=re_t)
-        success = out[1].detach().cpu().numpy().flatten().reshape(28, len(sinr_grid))
+        tbler = out[3].detach().cpu().numpy().reshape(28, len(sinr_grid))
         thresholds = np.full(28, 99.0)
         for m in range(28):
-            ok = np.where(success[m] > 0)[0]
+            ok = np.where(np.isfinite(tbler[m]) & (tbler[m] <= 0.1))[0]
             if len(ok):
                 thresholds[m] = sinr_grid[ok[0]]
         return thresholds
 
     def _pick_mcs(self, sinr_db: np.ndarray) -> np.ndarray:
-        mcs = np.searchsorted(self.mcs_thresholds, sinr_db) - 1
-        return np.clip(mcs, 0, 27)
+        # highest MCS whose threshold is met (MCS rows without a BLER
+        # table sit at 99 dB, so the table is not sorted: no searchsorted)
+        ok = sinr_db[:, None] >= self.mcs_thresholds[None, :]
+        lowest = int(np.argmin(self.mcs_thresholds))
+        return np.where(ok.any(axis=1), 27 - np.argmax(ok[:, ::-1], axis=1), lowest)
 
     def _sinr_per_re(self, fading: np.ndarray) -> np.ndarray:
         """Per-RE SINR (linear) for every user in one slot."""
@@ -194,7 +201,7 @@ class SysCellEnv:
             idx = np.where(scheduled)[0]
             mcs_t = torch.tensor(self._pick_mcs(sinr_db[idx]).reshape(1, -1, 1),
                                  dtype=torch.int32)
-            sinr_t = torch.tensor(sinr_db[idx].reshape(1, -1, 1), dtype=torch.float32)
+            sinr_t = torch.tensor(sinr[idx].reshape(1, -1, 1), dtype=torch.float32)  # linear
             re_t = torch.tensor(alloc_re[idx].reshape(1, -1, 1), dtype=torch.float32)
             out = self.phy_abs(mcs_t, sinr_eff=sinr_t, num_allocated_re=re_t)
             decoded = out[0].detach().cpu().numpy().flatten().astype(float)

@@ -1,0 +1,10 @@
+site_id,sector,cell_name,technology,duplex,frequency_band,bandwidth_mhz,antenna_name,mimo_layers_max,azimuth_deg,electrical_tilt_deg,mechanical_tilt_deg,total_downtilt_deg,eirp_dbm_per_port,eirp_combined_mimo_dbm,height_agl_m,dl_bler_target_pct,p0_nominal_pusch_dbm,pusch_alpha
+sf-twin-tower-A,1,NR_SF_TWIN_A_1,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,90,7.9,0,7.9,27.3,36.3,30,10,-104,0.8
+sf-twin-tower-A,2,NR_SF_TWIN_A_2,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,210,6.45,0,6.45,27.3,36.3,30,10,-104,0.8
+sf-twin-tower-A,3,NR_SF_TWIN_A_3,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,330,10.0,0,10.0,27.3,36.3,30,10,-104,0.8
+sf-twin-tower-B,1,NR_SF_TWIN_B_1,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,90,10.0,0,10.0,27.3,36.3,30,10,-104,0.8
+sf-twin-tower-B,2,NR_SF_TWIN_B_2,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,210,0.97,0,0.97,27.3,36.3,30,10,-104,0.8
+sf-twin-tower-B,3,NR_SF_TWIN_B_3,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,330,3.92,0,3.92,27.3,36.3,30,10,-104,0.8
+sf-twin-tower-C,1,NR_SF_TWIN_C_1,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,90,7.59,0,7.59,27.3,36.3,30,10,-96,0.8
+sf-twin-tower-C,2,NR_SF_TWIN_C_2,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,210,7.68,0,7.68,27.3,36.3,30,10,-96,0.8
+sf-twin-tower-C,3,NR_SF_TWIN_C_3,5G NR,TDD,n78 (3.6 GHz),100,065_17_XPB_3500_4_GENERIC,4,330,3.23,0,3.23,27.3,36.3,30,10,-96,0.8

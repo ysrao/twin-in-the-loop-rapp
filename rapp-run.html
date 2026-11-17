@@ -48,8 +48,13 @@ canvas{border:1px solid #ccc;border-radius:6px;max-width:100%}
 
 <h2>Step 2 — Network counters (ingested)</h2>
 <div class="box">
-<p style="margin-top:0">In deployment the Virtual RIC collects the SMO/OSS PM export automatically each cycle and parses the standard counters itself — the operator does not type them. Here the study network's recorded counters are pre-loaded; load your own export to replace them. <span class="note" id="counterSource">(Counters: the study network's recorded values. MCS histograms: the prototype's PM stand-in file for Tower B — the schema is the contract)</span></p>
-<p><input type="file" id="countersFile" accept=".csv,text/csv"> <span class="note" id="counterSummary"></span></p>
+<p style="margin-top:0">In deployment the Virtual RIC collects the SMO/OSS PM export automatically each cycle and parses the standard counters itself — the operator does not type them. Here the study network's recorded counters are pre-loaded; load your own export to replace them. <span class="note" id="counterSource">(Counters: the study network's recorded values. MCS histograms: Tower B recorded, Towers A and C dummy test files — the schema is the contract)</span></p>
+<p><span class="note">Test counters:</span> <button class="cntbtn sel" id="cnt-0" onclick="pickCounters(0)">Recorded (default)</button><button class="cntbtn" id="cnt-1" onclick="pickCounters(1)">Test counters 1 — Busy hour, congested</button><button class="cntbtn" id="cnt-2" onclick="pickCounters(2)">Test counters 2 — Night, low load</button><button class="cntbtn" id="cnt-3" onclick="pickCounters(3)">Test counters 3 — Edge coverage hole</button><button class="cntbtn" id="cnt-4" onclick="pickCounters(4)">Test counters 4 — URLLC-heavy slice</button></p>
+<p><label class="note" for="countersFile">Counters CSV:</label> <input type="file" id="countersFile" accept=".csv,text/csv"> <span class="note" id="counterSummary"></span></p>
+<p><label class="note" for="pmFile">PM MCS-histogram CSV (for the audit):</label> <input type="file" id="pmFile" accept=".csv,text/csv"> <span class="note" id="pmSummary">Columns: site_id, sector (1-3), mcs (0-27), grant_share, olla_offset_db, mcs_cap — one or several towers per file. In force: Tower B (recorded, <code>data/test_pm_mcs.csv</code>) and dummy test histograms for Towers A and C (<code>data/test_pm_mcs_tower_A.csv</code>, <code>_C.csv</code>; all three in <code>data/test_pm_mcs_all_towers.csv</code>).</span></p>
+<p><label class="note" for="linkFile">Link PM daily counters CSV (BLER, HARQ, rank, power control, load):</label> <input type="file" id="linkFile" accept=".csv,text/csv"> <label class="note" for="linkCfgFile">cell config CSV:</label> <input type="file" id="linkCfgFile" accept=".csv,text/csv"> <span class="note" id="linkSummary">In force: dummy counters for Towers A, B, C, 18 Aug – 18 Oct 2026 (<code>data/pm_synth/pm_daily_counters.csv</code> + <code>site_config.csv</code>).</span></p>
+<p class="msg err hidden" id="linkWarn"></p>
+<p class="msg err hidden" id="pmWarn"></p>
 <p class="msg err hidden" id="counterWarn"></p>
 <details><summary class="note">Counters and PM histograms in force (inspect / what-if edit)</summary>
 <textarea id="countersCsv" rows="12"></textarea>
@@ -99,7 +104,45 @@ var STUDY = {
 // Counters the run package needs (the others are informational).
 var REQUIRED_COUNTERS = ['median_dl_mbps','median_ul_mbps','edge_dl_mbps','edge_ul_mbps','fairness','prb_util_pct',
   'signalling_load','cell_load','low_traffic_hours','carriers_per_site','shares_embb','shares_urllc','shares_mmtc'];
-var PM_SITE_KEY = 'B';   // the MCS histograms in force belong to Tower B
+var PM_SITE_KEY = 'B';   // the recorded MCS histograms belong to Tower B; A and C have dummy test histograms
+var PM_EXTRA_DEFAULT = {"A": {"gnb_configured": {"olla_offset_db": 0.0, "mcs_cap": 24}, "mcs_histograms_by_sector": {"0": [0.0, 4e-05, 0.00016, 0.00051, 0.00148, 0.0038, 0.00875, 0.01801, 0.03318, 0.05471, 0.08072, 0.10656, 0.12589, 0.13308, 0.12589, 0.10656, 0.08072, 0.05471, 0.03318, 0.01801, 0.00875, 0.0038, 0.00148, 0.0, 0.0, 0.0, 0.0, 0.0], "1": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1e-05, 6e-05, 0.00027, 0.00104, 0.00344, 0.00973, 0.02346, 0.04819, 0.08437, 0.12586, 0.16, 0.17333, 0.16, 0.12586, 0.08437, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "2": [0.0, 0.0, 0.01567, 0.02664, 0.04174, 0.06027, 0.08021, 0.09837, 0.11118, 0.11581, 0.11118, 0.09837, 0.08021, 0.06027, 0.04174, 0.02664, 0.01567, 0.0085, 0.00425, 0.00195, 0.00083, 0.00032, 0.00012, 4e-05, 0.0, 0.0, 0.0, 0.0]}}, "C": {"gnb_configured": {"olla_offset_db": -1.0, "mcs_cap": 24}, "mcs_histograms_by_sector": {"0": [0.0, 0.0, 0.0, 0.0, 4e-05, 0.00016, 0.00051, 0.00148, 0.0038, 0.00875, 0.01801, 0.03318, 0.05471, 0.08072, 0.10656, 0.12589, 0.13308, 0.12589, 0.10656, 0.08072, 0.05471, 0.03318, 0.01801, 0.00875, 0.0038, 0.00148, 0.0, 0.0], "1": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1e-05, 6e-05, 0.00027, 0.00104, 0.00344, 0.00973, 0.02346, 0.04819, 0.08437, 0.12586, 0.16, 0.17333, 0.16, 0.12586, 0.08437, 0.0, 0.0, 0.0], "2": [0.0, 0.0, 0.0, 0.0, 0.0, 0.01567, 0.02664, 0.04174, 0.06027, 0.08021, 0.09837, 0.11118, 0.11581, 0.11118, 0.09837, 0.08021, 0.06027, 0.04174, 0.02664, 0.01567, 0.0085, 0.00425, 0.00195, 0.00083, 0.00032, 0.00012, 4e-05, 0.0]}}};
+// MCS histograms in force, keyed by tower letter: {A: {gnb_configured, mcs_histograms_by_sector}, B: ..., C: ...}
+function pmDefault(){
+  var o = JSON.parse(JSON.stringify(PM_EXTRA_DEFAULT));
+  o.B = {gnb_configured: {olla_offset_db: 0, mcs_cap: 24}, mcs_histograms_by_sector: JSON.parse(HIST_DEFAULT)};
+  return {A: o.A, B: o.B, C: o.C};
+}
+var LINK_PM = [{"site_id": "sf-twin-tower-A", "sectors": {"1": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 54.615, "user_dl_tput_mbps": 24.625, "avg_cqi": 8.5, "avg_dl_mcs": 14.85, "dl_bler_initial_pct": 16.435, "dl_bler_residual_pct": 1.285, "harq_dl_retx_rate_pct": 19.145, "harq_dl_avg_tx": 1.18, "ul_bler_initial_pct": 9.58, "dl_rank1_pct": 26.0, "dl_avg_rank": 2.24, "ul_sinr_avg_db": 11.4, "ul_phr_avg_db": 15.2, "ul_phr_negative_pct": 9.15, "pusch_tx_power_avg_dbm": 9.2}, "congested_days_pct": 0.0}, "2": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 56.525, "user_dl_tput_mbps": 26.415, "avg_cqi": 8.7, "avg_dl_mcs": 15.25, "dl_bler_initial_pct": 21.19, "dl_bler_residual_pct": 2.225, "harq_dl_retx_rate_pct": 25.68, "harq_dl_avg_tx": 1.239, "ul_bler_initial_pct": 9.405, "dl_rank1_pct": 25.65, "dl_avg_rank": 2.23, "ul_sinr_avg_db": 11.0, "ul_phr_avg_db": 14.85, "ul_phr_negative_pct": 8.05, "pusch_tx_power_avg_dbm": 8.8}, "congested_days_pct": 0.0}, "3": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 56.535, "user_dl_tput_mbps": 24.405, "avg_cqi": 8.55, "avg_dl_mcs": 15.0, "dl_bler_initial_pct": 16.0, "dl_bler_residual_pct": 1.4, "harq_dl_retx_rate_pct": 18.555, "harq_dl_avg_tx": 1.175, "ul_bler_initial_pct": 9.63, "dl_rank1_pct": 26.2, "dl_avg_rank": 2.23, "ul_sinr_avg_db": 11.15, "ul_phr_avg_db": 14.65, "ul_phr_negative_pct": 8.3, "pusch_tx_power_avg_dbm": 9.2}, "congested_days_pct": 0.0}}}, {"site_id": "sf-twin-tower-B", "sectors": {"1": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 83.495, "user_dl_tput_mbps": 10.12, "avg_cqi": 10.4, "avg_dl_mcs": 18.25, "dl_bler_initial_pct": 10.385, "dl_bler_residual_pct": 0.345, "harq_dl_retx_rate_pct": 11.46, "harq_dl_avg_tx": 1.111, "ul_bler_initial_pct": 9.415, "dl_rank1_pct": 30.5, "dl_avg_rank": 2.09, "ul_sinr_avg_db": 11.3, "ul_phr_avg_db": 14.85, "ul_phr_negative_pct": 9.5, "pusch_tx_power_avg_dbm": 9.35}, "congested_days_pct": 46.8}, "2": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 88.51, "user_dl_tput_mbps": 9.365, "avg_cqi": 10.4, "avg_dl_mcs": 18.1, "dl_bler_initial_pct": 10.215, "dl_bler_residual_pct": 0.34, "harq_dl_retx_rate_pct": 11.26, "harq_dl_avg_tx": 1.109, "ul_bler_initial_pct": 9.425, "dl_rank1_pct": 29.7, "dl_avg_rank": 2.095, "ul_sinr_avg_db": 10.9, "ul_phr_avg_db": 14.4, "ul_phr_negative_pct": 9.1, "pusch_tx_power_avg_dbm": 9.35}, "congested_days_pct": 74.2}, "3": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -104.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 84.875, "user_dl_tput_mbps": 9.26, "avg_cqi": 10.4, "avg_dl_mcs": 18.3, "dl_bler_initial_pct": 9.91, "dl_bler_residual_pct": 0.38, "harq_dl_retx_rate_pct": 10.89, "harq_dl_avg_tx": 1.105, "ul_bler_initial_pct": 9.535, "dl_rank1_pct": 30.55, "dl_avg_rank": 2.1, "ul_sinr_avg_db": 10.4, "ul_phr_avg_db": 14.45, "ul_phr_negative_pct": 9.45, "pusch_tx_power_avg_dbm": 9.3}, "congested_days_pct": 50.0}}}, {"site_id": "sf-twin-tower-C", "sectors": {"1": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -96.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 54.135, "user_dl_tput_mbps": 26.59, "avg_cqi": 11.3, "avg_dl_mcs": 19.9, "dl_bler_initial_pct": 10.04, "dl_bler_residual_pct": 0.34, "harq_dl_retx_rate_pct": 11.045, "harq_dl_avg_tx": 1.107, "ul_bler_initial_pct": 13.815, "dl_rank1_pct": 65.25, "dl_avg_rank": 1.47, "ul_sinr_avg_db": 6.05, "ul_phr_avg_db": 3.4, "ul_phr_negative_pct": 33.9, "pusch_tx_power_avg_dbm": 19.4}, "congested_days_pct": 0.0}, "2": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -96.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 55.405, "user_dl_tput_mbps": 28.07, "avg_cqi": 11.35, "avg_dl_mcs": 19.65, "dl_bler_initial_pct": 9.8, "dl_bler_residual_pct": 0.35, "harq_dl_retx_rate_pct": 10.755, "harq_dl_avg_tx": 1.104, "ul_bler_initial_pct": 16.62, "dl_rank1_pct": 68.2, "dl_avg_rank": 1.44, "ul_sinr_avg_db": 4.65, "ul_phr_avg_db": 1.6, "ul_phr_negative_pct": 40.8, "pusch_tx_power_avg_dbm": 19.3}, "congested_days_pct": 0.0}, "3": {"config": {"dl_bler_target_pct": 10.0, "p0_nominal_pusch_dbm": -96.0, "pusch_alpha": 0.8, "mimo_layers_max": 4}, "days": 62, "median": {"prb_util_dl_pct": 54.46, "user_dl_tput_mbps": 24.635, "avg_cqi": 11.3, "avg_dl_mcs": 19.95, "dl_bler_initial_pct": 9.905, "dl_bler_residual_pct": 0.365, "harq_dl_retx_rate_pct": 10.89, "harq_dl_avg_tx": 1.105, "ul_bler_initial_pct": 14.17, "dl_rank1_pct": 65.4, "dl_avg_rank": 1.48, "ul_sinr_avg_db": 6.05, "ul_phr_avg_db": 3.8, "ul_phr_negative_pct": 31.8, "pusch_tx_power_avg_dbm": 19.6}, "congested_days_pct": 0.0}}}];
+var LINK_METRICS = ['prb_util_dl_pct','user_dl_tput_mbps','avg_cqi','avg_dl_mcs','dl_bler_initial_pct','dl_bler_residual_pct',
+  'harq_dl_retx_rate_pct','harq_dl_avg_tx','ul_bler_initial_pct','dl_rank1_pct','dl_avg_rank','ul_sinr_avg_db','ul_phr_avg_db','ul_phr_negative_pct','pusch_tx_power_avg_dbm'];
+var LINK_CFG_TEXT = null, LINK_PM_TEXT = null;
+function csvRows(t){ var L = t.trim().split(/\r?\n/).filter(function(l){ return l.trim(); }); var h = L.shift().split(',').map(function(x){ return x.trim(); });
+  return L.map(function(l){ var c = l.split(','), o = {}; h.forEach(function(k, i){ o[k] = (c[i] || '').trim(); }); return o; }); }
+function median(a){ a = a.slice().sort(function(x, y){ return x - y; }); var n = a.length; return n ? (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2) : null; }
+function aggregateLink(pmText, cfgText){
+  var pm = csvRows(pmText), cfg = csvRows(cfgText), out = {};
+  var needP = LINK_METRICS.concat(['site_id','sector','cell_congested']), needC = ['site_id','sector','dl_bler_target_pct','p0_nominal_pusch_dbm','pusch_alpha','mimo_layers_max'];
+  var mp = needP.filter(function(k){ return !(k in (pm[0] || {})); }), mc = needC.filter(function(k){ return !(k in (cfg[0] || {})); });
+  if (mp.length) throw new Error('daily counters CSV is missing ' + mp.join(', '));
+  if (mc.length) throw new Error('cell config CSV is missing ' + mc.join(', '));
+  cfg.forEach(function(r){ var e = out[r.site_id] = out[r.site_id] || {site_id: r.site_id, sectors: {}};
+    e.sectors[r.sector] = {config: {dl_bler_target_pct: +r.dl_bler_target_pct, p0_nominal_pusch_dbm: +r.p0_nominal_pusch_dbm, pusch_alpha: +r.pusch_alpha, mimo_layers_max: parseInt(r.mimo_layers_max, 10)}}; });
+  Object.keys(out).forEach(function(sid){ Object.keys(out[sid].sectors).forEach(function(sec){
+    var rs = pm.filter(function(r){ return r.site_id === sid && r.sector === sec; }), d = out[sid].sectors[sec];
+    if (!rs.length) throw new Error('no daily counters for ' + sid + ' sector ' + sec);
+    d.days = rs.length; d.median = {};
+    LINK_METRICS.forEach(function(k){ d.median[k] = +median(rs.map(function(r){ return +r[k]; })).toFixed(3); });
+    d.congested_days_pct = +(100 * rs.filter(function(r){ return +r.cell_congested === 1; }).length / rs.length).toFixed(1); }); });
+  return Object.keys(out).map(function(k){ return out[k]; });
+}
+function loadLink(){
+  showMsg('linkWarn', '');
+  if (!LINK_PM_TEXT || !LINK_CFG_TEXT) { $('linkSummary').textContent = 'Loaded one of the two files; load the ' + (LINK_PM_TEXT ? 'cell config' : 'daily counters') + ' CSV too.'; return; }
+  try { LINK_PM = aggregateLink(LINK_PM_TEXT, LINK_CFG_TEXT);
+    $('linkSummary').textContent = 'Loaded: ' + LINK_PM.map(function(e){ return e.site_id.replace('sf-twin-tower-', 'Tower '); }).join(', ') + '.'; refreshPkgText(); }
+  catch (e) { showMsg('linkWarn', 'Link counters not loaded: ' + e.message + '.', 'err'); }
+}
+function pmInForce(){ try { return JSON.parse($('histJson').value) || {}; } catch (e) { return null; } }
 var MODE = 'cluster', FN = 'capacity', RESULT = null;
 
 function $(id){ return document.getElementById(id); }
@@ -148,8 +191,9 @@ function activeSites(){
 }
 function siteIssues(s){
   var unknown = s.filter(function(v){ return !STUDY[v.key]; }).map(function(v){ return v.name; });
-  var hasPm = s.some(function(v){ return v.key === PM_SITE_KEY; });
-  return { unknown: unknown, hasPm: hasPm };
+  var pm = pmInForce() || {};
+  var noPm = s.filter(function(v){ return !pm[v.key]; }).map(function(v){ return v.name; });
+  return { unknown: unknown, hasPm: noPm.length < s.length, noPm: noPm };
 }
 function renderConfig_(){
   var s = activeSites();
@@ -158,9 +202,9 @@ function renderConfig_(){
   if (iss.unknown.length)
     w.push('No study terrain or sector-share data for site(s) ' + iss.unknown.join(', ') +
       '. The package would use ground height 0 m and equal ⅓ shares, which is wrong for the San Francisco terrain.');
-  if (!iss.hasPm)
-    w.push('The MCS histograms in force belong to Tower ' + PM_SITE_KEY + ', which is not among the active sites' +
-      (FN === 'audit' ? ' — the audit cannot run on this site set.' : '; the audit function will not be valid.'));
+  if (iss.noPm.length)
+    w.push('No MCS histograms are in force for Tower(s) ' + iss.noPm.join(', ') +
+      (iss.hasPm ? ' — the audit skips them.' : (FN === 'audit' ? ' — the audit cannot run on this site set.' : '; the audit function will not be valid.')));
   if (w.length) { $('sitesWarn').textContent = w.join(' '); $('sitesWarn').className = 'msg wrn'; }
   else $('sitesWarn').className = 'msg wrn hidden';
   $('unknownOptWrap').className = iss.unknown.length ? 'note' : 'note hidden';
@@ -203,11 +247,11 @@ function buildPackage(){
   var iss = siteIssues(active);
   if (iss.unknown.length && !$('allowDefaults').checked)
     throw new Error('Unknown site(s) ' + iss.unknown.join(', ') + ' — tick “Proceed anyway” in Step 1 to use defaults, or use the study sites.');
-  if ((FN === 'audit' || FN === 'all') && !iss.hasPm)
-    throw new Error('The audit needs Tower ' + PM_SITE_KEY + ' (its MCS histograms are the ones loaded) among the active sites.');
-  var hist;
-  try { hist = JSON.parse($('histJson').value); }
+  var pmAll;
+  try { pmAll = JSON.parse($('histJson').value) || {}; }
   catch (e) { throw new Error('The MCS histogram text is not valid JSON: ' + e.message); }
+  if ((FN === 'audit' || FN === 'all') && !iss.hasPm)
+    throw new Error('The audit needs MCS histograms for at least one active tower; none are in force for ' + iss.noPm.join(', ') + '.');
 
   var sites = active.map(function(v){
     var st = STUDY[v.key] || {gz: 0, cur: [1/3, 1/3, 1/3], proj: null};
@@ -222,7 +266,13 @@ function buildPackage(){
     totals = {};
     totals[sites[0].site_id] = 1.0;
   }
-  var olla = num(c.olla_offset_db), cap = num(c.mcs_cap);
+  // MCS histograms for every active tower that has them (Tower B first: the recorded one).
+  var pmSites = active.filter(function(v){ return pmAll[v.key]; })
+    .sort(function(a, b){ return (a.key === PM_SITE_KEY ? -1 : 0) - (b.key === PM_SITE_KEY ? -1 : 0); })
+    .map(function(v){ var e = pmAll[v.key];
+      return { site_id: 'sf-twin-tower-' + v.key, gnb_configured: e.gnb_configured, mcs_histograms_by_sector: e.mcs_histograms_by_sector }; });
+  if (!pmSites.length) pmSites = [{ site_id: 'sf-twin-tower-' + PM_SITE_KEY, gnb_configured: pmDefault().B.gnb_configured,
+                                    mcs_histograms_by_sector: pmDefault().B.mcs_histograms_by_sector }];
   return { mode: MODE, function: FN,
     sites: sites.map(function(s){ var t = Object.assign({}, s); delete t._traffic; delete t._proj; return t; }),
     site_traffic_totals: totals,
@@ -233,9 +283,9 @@ function buildPackage(){
       edge_ul: c.edge_ul_mbps, fairness: c.fairness, prb_util: c.prb_util_pct, signalling: c.signalling_load,
       load: c.cell_load, low_hours: c.low_traffic_hours, carriers_per_site: c.carriers_per_site,
       current_shares: [c.shares_embb, c.shares_urllc, c.shares_mmtc] },
-    pm: { site_id: 'sf-twin-tower-' + PM_SITE_KEY,
-          gnb_configured: { olla_offset_db: olla === null ? 0 : olla, mcs_cap: cap === null ? 24 : cap },
-          mcs_histograms_by_sector: hist } };
+    pm: pmSites[0],
+    pm_sites: pmSites,
+    link_pm: LINK_PM.filter(function(e){ return active.some(function(v){ return e.site_id === 'sf-twin-tower-' + v.key; }); }) };
 }
 
 // Saving: inside a Claude artifact use the downloads capability; on a normal web host fall back to a link download.
@@ -270,20 +320,85 @@ function readFile(input, target, cb){
 }
 $('sitesCsv').value = SITES_DEFAULT;
 $('countersCsv').value = COUNTERS_DEFAULT;
-$('histJson').value = HIST_DEFAULT;
+$('histJson').value = JSON.stringify(pmDefault());
 $('sitesFile').addEventListener('change', function(){ readFile(this, 'sitesCsv', renderConfig); });
 $('countersFile').addEventListener('change', function(){
   readFile(this, 'countersCsv', function(t, name){
-    $('counterSource').textContent = '(Counters: loaded from ' + name + '. MCS histograms: the prototype’s PM stand-in file for Tower B — edit below to replace)';
+    markCounters(-1);
+    $('counterSource').textContent = '(Counters: loaded from ' + name + '. MCS histograms: Tower B recorded, Towers A and C dummy test files — edit below to replace)';
     counterSummary();
   });
 });
+
+// ---- built-in test counter sets (menu in Step 2) ----
+var TEST_COUNTERS = [{"name": "counters_busy_hour_congested.csv", "label": "Busy hour, congested", "csv": "kpi,value\ncoverage_pct,36.2\nmedian_rsrp_dbm,-103.4\nmedian_sinr_db,5.1\nspectral_efficiency,1.62\nmedian_dl_mbps,22\nmedian_ul_mbps,6.5\nedge_dl_mbps,3.1\nedge_ul_mbps,0.9\nfairness,0.33\nprb_util_pct,94\nsignalling_load,58\ncell_load,0.92\nshares_embb,0.70\nshares_urllc,0.15\nshares_mmtc,0.15\nlow_traffic_hours,4\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\naudit_offset_sector1_db,-2.0\naudit_offset_sector2_db,-3.0\naudit_offset_sector3_db,-3.25\n"}, {"name": "counters_night_low_load.csv", "label": "Night, low load", "csv": "kpi,value\ncoverage_pct,41.8\nmedian_rsrp_dbm,-100.9\nmedian_sinr_db,11.3\nspectral_efficiency,2.74\nmedian_dl_mbps,96\nmedian_ul_mbps,28\nedge_dl_mbps,18.5\nedge_ul_mbps,5.2\nfairness,0.62\nprb_util_pct,18\nsignalling_load,9\ncell_load,0.20\nshares_embb,0.50\nshares_urllc,0.20\nshares_mmtc,0.30\nlow_traffic_hours,10\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\naudit_offset_sector1_db,-1.0\naudit_offset_sector2_db,-1.5\naudit_offset_sector3_db,-1.75\n"}, {"name": "counters_edge_coverage_hole.csv", "label": "Edge coverage hole", "csv": "kpi,value\ncoverage_pct,31.0\nmedian_rsrp_dbm,-108.2\nmedian_sinr_db,4.2\nspectral_efficiency,1.48\nmedian_dl_mbps,27\nmedian_ul_mbps,7\nedge_dl_mbps,1.8\nedge_ul_mbps,0.5\nfairness,0.28\nprb_util_pct,72\nsignalling_load,31\ncell_load,0.68\nshares_embb,0.60\nshares_urllc,0.20\nshares_mmtc,0.20\nlow_traffic_hours,6\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\naudit_offset_sector1_db,-1.5\naudit_offset_sector2_db,-3.5\naudit_offset_sector3_db,-2.5\n"}, {"name": "counters_urllc_heavy_slice.csv", "label": "URLLC-heavy slice", "csv": "kpi,value\ncoverage_pct,40.1\nmedian_rsrp_dbm,-101.2\nmedian_sinr_db,8.4\nspectral_efficiency,2.15\nmedian_dl_mbps,34\nmedian_ul_mbps,14\nedge_dl_mbps,5.9\nedge_ul_mbps,2.4\nfairness,0.45\nprb_util_pct,77\nsignalling_load,47\ncell_load,0.71\nshares_embb,0.40\nshares_urllc,0.45\nshares_mmtc,0.15\nlow_traffic_hours,5\ncarriers_per_site,2\nolla_offset_db,0\nmcs_cap,24\naudit_offset_sector1_db,-1.25\naudit_offset_sector2_db,-2.0\naudit_offset_sector3_db,-2.25\n"}];
+function markCounters(n){ for (var i = 0; i <= TEST_COUNTERS.length; i++){ var b = $("cnt-" + i); if (b) b.className = "cntbtn" + (i === n ? " sel" : ""); } }
+function pickCounters(n){
+  var t = n === 0 ? null : TEST_COUNTERS[n - 1];
+  $("countersCsv").value = t ? t.csv : COUNTERS_DEFAULT;
+  $("countersFile").value = "";
+  $("counterSource").textContent = t ? "(Counters: Test counters " + n + " — " + t.label + " (" + t.name + "), dummy values. MCS histograms: Tower B recorded, Towers A and C dummy test files)"
+    : "(Counters: the study network's recorded values. MCS histograms: Tower B recorded, Towers A and C dummy test files — the schema is the contract)";
+  markCounters(n); counterSummary();
+}
 $('sitesCsv').addEventListener('input', renderConfig);
 $('allowDefaults').addEventListener('change', function(){ showMsg('pkgMsg', ''); });
 $('countersCsv').addEventListener('input', counterSummary);
+$('histJson').addEventListener('input', renderConfig);
 function renderConfig(){ renderConfig_(); refreshPkgText(); }
 function counterSummary(){ counterSummary_(); refreshPkgText(); }
 function selectFn(f){ selectFn_(f); refreshPkgText(); }
+
+// ---- PM CSV -> MCS histograms + configured OLLA offset / MCS cap ----------
+function setCounter(key, val){
+  var lines = $('countersCsv').value.trim().split(/\r?\n/), found = false;
+  for (var i = 1; i < lines.length; i++)
+    if (lines[i].slice(0, lines[i].lastIndexOf(',')).trim() === key){ lines[i] = key + ',' + val; found = true; }
+  if (!found) lines.push(key + ',' + val);
+  $('countersCsv').value = lines.join('\n') + '\n';
+}
+function loadPmCsv(text, name){
+  showMsg('pmWarn', '');
+  try {
+    var rows = text.trim().split(/\r?\n/).filter(function(l){ return l.trim(); });
+    var head = rows.shift().split(',').map(function(h){ return h.trim(); });
+    var need = ['site_id','sector','mcs','grant_share','olla_offset_db','mcs_cap'];
+    var miss = need.filter(function(k){ return head.indexOf(k) < 0; });
+    if (miss.length) throw new Error('missing column(s) ' + miss.join(', '));
+    var ix = {}; head.forEach(function(h, i){ ix[h] = i; });
+    var bySite = {};
+    rows.forEach(function(l, n){
+      var c = l.split(','), sid = c[ix.site_id].trim(), m0 = /^sf-twin-tower-([A-Za-z0-9]+)$/.exec(sid);
+      if (!m0) throw new Error('row ' + (n + 2) + ': site_id must look like sf-twin-tower-A / -B / -C; it is ' + sid);
+      var key = m0[1].toUpperCase(), sec = parseInt(c[ix.sector], 10) - 1, mcs = parseInt(c[ix.mcs], 10), v = parseFloat(c[ix.grant_share]);
+      if (!(sec >= 0 && sec <= 2) || !(mcs >= 0 && mcs <= 27) || !isFinite(v))
+        throw new Error('row ' + (n + 2) + ': sector must be 1-3, mcs 0-27 and grant_share a number');
+      var e = bySite[key];
+      if (!e) { e = bySite[key] = {h: {'0': [], '1': [], '2': []}, olla: parseFloat(c[ix.olla_offset_db]), cap: parseInt(c[ix.mcs_cap], 10)};
+                for (var s = 0; s < 3; s++) for (var m = 0; m < 28; m++) e.h[String(s)].push(0); }
+      e.h[String(sec)][mcs] += v;
+    });
+    var pm = pmInForce() || pmDefault(), keys = Object.keys(bySite).sort();
+    keys.forEach(function(key){
+      var e = bySite[key];
+      ['0','1','2'].forEach(function(k){
+        var t = e.h[k].reduce(function(a, b){ return a + b; }, 0);
+        if (!(t > 0)) throw new Error('no grants for Tower ' + key + ' sector ' + (+k + 1));
+        e.h[k] = e.h[k].map(function(x){ return +(x / t).toFixed(6); });
+      });
+      pm[key] = {gnb_configured: {olla_offset_db: isFinite(e.olla) ? e.olla : 0, mcs_cap: isFinite(e.cap) ? e.cap : 24}, mcs_histograms_by_sector: e.h};
+      if (key === PM_SITE_KEY) { if (isFinite(e.olla)) setCounter('olla_offset_db', e.olla); if (isFinite(e.cap)) setCounter('mcs_cap', e.cap); }
+    });
+    $('histJson').value = JSON.stringify(pm);
+    $('pmSummary').textContent = 'Loaded ' + name + ': ' + rows.length + ' rows for Tower ' + keys.join(', ') + '. Histograms in force: Tower ' + Object.keys(pm).sort().join(', ') + '.';
+    renderConfig(); counterSummary();
+  } catch (e) {
+    showMsg('pmWarn', 'PM CSV ' + name + ' not loaded: ' + e.message + '.', 'err');
+  }
+}
+$('pmFile').addEventListener('change', function(){ readFile(this, null, loadPmCsv); });
+$('linkFile').addEventListener('change', function(){ readFile(this, null, function(t){ LINK_PM_TEXT = t; loadLink(); }); });
+$('linkCfgFile').addEventListener('change', function(){ readFile(this, null, function(t){ LINK_CFG_TEXT = t; loadLink(); }); });
 refreshPkgText();
 </script>
 </body>
