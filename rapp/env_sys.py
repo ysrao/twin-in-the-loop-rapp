@@ -211,8 +211,9 @@ class SysCellEnv:
             avg_rate[:] = 0.98 * avg_rate + 0.02 * (slot_rate / 1e6 + 1e-9)
         return self._window_kpis(bits_window, prb_used, n_slots)
 
-    def evaluate(self, profile_idx: int) -> np.ndarray:
-        """KPI vector for one fixed profile over the full horizon."""
+    def evaluate(self, profile_idx: int, load: float = 0.75) -> np.ndarray:
+        """KPI vector for one fixed profile over the full horizon, at the
+        given offered load (share of users active per slot; 0.75 by default)."""
         traj = self.simulate(lambda k: profile_idx, n_windows=5,
-                             window_slots=self.n_slots // 5)
+                             window_slots=self.n_slots // 5, load=load)
         return traj[-1][2]

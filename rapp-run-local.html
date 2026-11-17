@@ -533,7 +533,7 @@ function provenance(R){
 }
 function renderResult(R, log){
   var h = '', fnLabel = {capacity:'Capacity', slice:'Slice / PRB', energy:'Energy', audit:'MCS audit', all:'All functions'}[R.function] || R.function;
-  h += '<p class="runinfo">' + esc(fnLabel) + ' &middot; ' + (R.mode === 'cluster' ? 'cluster (Towers A + B + C)' : 'single tower (Tower B)') +
+  h += '<p class="runinfo">' + esc(fnLabel) + ' &middot; ' + (R.mode === 'cluster' ? 'cluster (' : 'single tower (') + (arr(R.sites).length ? arr(R.sites).map(siteLabel).join(' + ') : (R.mode === 'cluster' ? 'Towers A + B + C' : 'Tower B')) + ')' +
        ' &middot; Sionna RT backend: ' + esc(R.run && R.run.backend && R.run.backend.indexOf('metal') === 0 ? 'the Apple GPU (Metal)' : (R.run && R.run.backend) || '—') +
        ' &middot; ' + fmt(R.run && R.run.seconds) + ' s</p>';
   h += '<div class="chips">' + provenance(R).map(function(p){
@@ -560,11 +560,11 @@ function renderResult(R, log){
     }
   }
   if (R.maps) h += '<h3>Best-server RSRP map</h3><div class="maps"><figure><canvas id="mapB"></canvas><figcaption>Before (as built)</figcaption></figure><figure><canvas id="mapA"></canvas><figcaption>After (recommended)</figcaption></figure></div><div id="legendSlot"></div>';
-  if (R.slice){
-    var S = R.slice;
-    h += '<h3>Slice / PRB</h3><p>Profile <b>' + esc(S.current_profile) + '</b> &rarr; <b>' + esc(S.chosen_profile) + '</b>' +
+  (arr(R.slices).length ? R.slices : (R.slice ? [R.slice] : [])).forEach(function(S){
+    h += '<h3>Slice / PRB' + (S.site ? ' — ' + siteLabel(S.site) : '') + '</h3><p>Profile <b>' + esc(S.current_profile) + '</b> &rarr; <b>' + esc(S.chosen_profile) + '</b>' +
          (S.current_profile === S.chosen_profile ? ' (kept: no profile beat it within the edge-throughput and fairness guardrails)' : '') +
-         '. Reward from the ingested counters with the existing shares: ' + fmt(S.counters_reward, 2) + '.</p>';
+         '. Reward from this tower\'s counters with the existing shares: ' + fmt(S.counters_reward, 2) +
+         (num(S.load) !== null ? '; profiles SYS-scored at its offered load ' + fmt(S.load, 2) : '') + '.</p>';
     h += '<div class="tablewrap"><table><tr><th>Profile</th><th>PRB shares eMBB / URLLC / mMTC</th><th>Scheduler</th><th class="num">Median DL</th><th class="num">Edge DL</th><th class="num">Fairness</th><th class="num">Twin reward</th><th></th></tr>';
     arr(S.profiles).forEach(function(q){
       var tag = q.name === S.chosen_profile ? 'chosen' : (q.name === S.current_profile ? 'existing' : '');
@@ -573,7 +573,7 @@ function renderResult(R, log){
            '</td><td class="num">' + fmt(q.reward, 2) + '</td><td>' + tag + '</td></tr>';
     });
     h += '</table></div>';
-  }
+  });
   auditsOf(R).forEach(function(A){
     h += '<h3>MCS / OLLA audit — ' + siteLabel(A.site) + '</h3><div class="tablewrap"><table><tr><th>Sector</th><th class="num">PM mean MCS</th><th class="num">Twin MCS</th><th class="num">Fitted offset (dB)</th><th class="num">Fit L1</th><th>Recommendation</th><th class="num">SE gain</th></tr>';
     arr(A.sectors).forEach(function(s, i){
@@ -603,6 +603,14 @@ function renderResult(R, log){
     h += '<h3>Energy</h3><p>Energy index <b>' + fmt(E.index_before, 0) + ' &rarr; ' + fmt(E.index_after) + '</b> (estimated saving ' + fmt(E.saving_pct) +
          '%, anchored on the RANOpt energy validation over the low-traffic hours; an estimate, not a twin trace).</p><ul>' +
          arr(E.plan).map(function(p){ return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>';
+    if (arr(E.per_site).length){
+      h += '<div class="tablewrap"><table><tr><th>Tower</th><th class="num">PRB use (%)</th><th class="num">Congested days (%)</th><th class="num">Low-traffic hours</th><th class="num">Carriers</th><th>Sleep</th><th class="num">Energy index</th></tr>';
+      E.per_site.forEach(function(p){
+        h += '<tr><td>' + siteLabel(p.site) + '</td><td class="num">' + fmt(p.prb_util, 0) + '</td><td class="num">' + fmt(p.congested_days_pct, 0) + '</td><td class="num">' + fmt(p.low_hours, 0) +
+             '</td><td class="num">' + esc(p.carriers) + '</td><td>' + (p.sleep ? 'yes' : '<b>no</b>') + '</td><td class="num">' + fmt(p.index_after) + '</td></tr>';
+      });
+      h += '</table></div><p class="note">Each tower is planned from its own counters. A tower at 85 % PRB use or more, or congested on 30 % of days or more in its link counters, keeps every carrier on.</p>';
+    }
   }
   arr(R.notes).forEach(function(n){ h += '<p class="note">' + esc(n) + '</p>'; });
   if (log) h += '<details><summary class="note">Run log (what the runner printed)</summary><pre class="log">' + esc(log) + '</pre></details>';
