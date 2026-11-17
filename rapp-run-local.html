@@ -529,6 +529,7 @@ function provenance(R){
   if (AU.length) p.push(AU.some(function(a){ return (a.sectors || []).some(function(s){ return s.recommendation; }); }) ? 'mcs_audit_guarded_accept' : 'mcs_audit_no_action_within_tolerance');
   if (R.link_audits && R.link_audits.length) p.push('link_audit_counter_rules');
   if (R.energy) p.push('energy_anchored_estimate');
+  if (R.o1 && arr(R.o1.edits).length) p.push(R.o1.error ? 'o1_check_not_run' : (R.o1.all_ok ? 'o1_check_passed' : 'o1_check_failed'));
   if (R.a1) p.push(R.a1.sim ? (R.a1.sim.all_ok ? 'a1_check_passed' : 'a1_check_failed') : (R.a1.local_ok ? 'a1_schema_valid_sim_not_run' : 'a1_schema_invalid'));
   return p;
 }
@@ -635,6 +636,30 @@ function renderResult(R, log){
             esc(arr(s1.policies).map(function(p){ return p.policy_id + '  (' + p.type + ')\n' + JSON.stringify(p.body, null, 1); }).join('\n\n')) + '</pre></details>';
     } else if (A1.sim_error) {
       h += '<p class="msg wrn">The A1 simulator was not run: ' + esc(A1.sim_error) + '. The schema check above still holds.</p>';
+    }
+  }
+
+  if (R.o1) {
+    var O1 = R.o1;
+    h += '<h3>O1 check — configuration changes as O1 edits, against YANG</h3>';
+    h += '<p class="note">Each recommended configuration change is written as an O1 edit. Antenna tilt, azimuth and transmit power use 3GPP NR NRM attributes (TS 28.541 / 28.662, Rel-18 YANG); OLLA offset, MCS cap and P0 have no 3GPP attribute, so they use a vendor-style module and are marked vendor. ' +
+          'Every edited leaf must exist in the models, be writable, and fit its type and range, and two out-of-range edits must be rejected. It shows the edits are well-formed, not that a real gNB accepts them: there is no NETCONF exchange. Transmit power is computed on a 40 W stand-in for the carrier\'s configured power.</p>';
+    if (O1.error) {
+      h += '<p class="msg wrn">The O1 check did not run: ' + esc(O1.error) + '.</p>';
+    } else if (!arr(O1.edits).length) {
+      h += '<p>No configuration change to check: the twin gate kept the as-built configuration.</p>';
+    } else {
+      var nStd = arr(O1.edits).filter(function(e){ return e.standard; }).length;
+      h += '<p>O1 check: <b>' + (O1.all_ok ? 'passed' : 'FAILED') + '</b> &middot; ' + arr(O1.edits).length + ' edits, ' + nStd + ' on 3GPP attributes, ' +
+            (arr(O1.edits).length - nStd) + ' vendor-specific &middot; ' + esc(O1.models) + '</p>';
+      h += '<div class="tablewrap"><table><tr><th>Change</th><th>O1 edit (instance)</th><th>Value</th><th>Model</th><th>Result</th></tr>' +
+        arr(O1.edits).map(function(e){
+          return '<tr><td>' + siteLabel(e.site) + ' sector ' + esc(e.sector) + ': ' + esc(e.what) + '</td><td><code>' + esc(e.instance) + '</code></td><td>' +
+                 esc(e.value) + ' ' + esc(e.units) + '</td><td>' + (e.standard ? '3GPP' : 'vendor') + '</td><td>' + (e.ok ? 'OK' : '<b>FAILED</b>: ' + esc(e.check)) + '</td></tr>';
+        }).join('') + '</table></div>';
+      h += '<p class="note">' + arr(O1.negative).map(function(n){ return 'Invalid edit (' + esc(n.what) + '): ' + (n.rejected ? 'rejected, ' + esc(n.reason) : '<b>not rejected</b>'); }).join('. ') + '.</p>';
+      h += '<details><summary class="note">The O1 edits (RFC 7951 JSON, one per site)</summary><pre style="white-space:pre-wrap;font-size:12px">' +
+            esc(JSON.stringify(O1.documents || {}, null, 1)) + '</pre></details>';
     }
   }
   arr(R.notes).forEach(function(n){ h += '<p class="note">' + esc(n) + '</p>'; });

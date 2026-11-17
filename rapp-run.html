@@ -587,6 +587,30 @@ function renderResult(r){
       x += '<p class="msg wrn">The A1 simulator was not run: ' + esc(A1.sim_error) + '. The schema check above still holds.</p>';
     }
   }
+
+  if (r.o1) {
+    var O1 = r.o1;
+    x += '<h3>O1 check — configuration changes as O1 edits, against YANG</h3>';
+    x += '<p class="note">Each recommended configuration change is written as an O1 edit. Antenna tilt, azimuth and transmit power use 3GPP NR NRM attributes (TS 28.541 / 28.662, Rel-18 YANG); OLLA offset, MCS cap and P0 have no 3GPP attribute, so they use a vendor-style module and are marked vendor. ' +
+          'Every edited leaf must exist in the models, be writable, and fit its type and range, and two out-of-range edits must be rejected. It shows the edits are well-formed, not that a real gNB accepts them: there is no NETCONF exchange. Transmit power is computed on a 40 W stand-in for the carrier\'s configured power.</p>';
+    if (O1.error) {
+      x += '<p class="msg wrn">The O1 check did not run: ' + esc(O1.error) + '.</p>';
+    } else if (!arr(O1.edits).length) {
+      x += '<p>No configuration change to check: the twin gate kept the as-built configuration.</p>';
+    } else {
+      var nStd = arr(O1.edits).filter(function(e){ return e.standard; }).length;
+      x += '<p>O1 check: <b>' + (O1.all_ok ? 'passed' : 'FAILED') + '</b> &middot; ' + arr(O1.edits).length + ' edits, ' + nStd + ' on 3GPP attributes, ' +
+            (arr(O1.edits).length - nStd) + ' vendor-specific &middot; ' + esc(O1.models) + '</p>';
+      x += '<div class="tablewrap"><table><tr><th>Change</th><th>O1 edit (instance)</th><th>Value</th><th>Model</th><th>Result</th></tr>' +
+        arr(O1.edits).map(function(e){
+          return '<tr><td>' + siteLabel(e.site) + ' sector ' + esc(e.sector) + ': ' + esc(e.what) + '</td><td><code>' + esc(e.instance) + '</code></td><td>' +
+                 esc(e.value) + ' ' + esc(e.units) + '</td><td>' + (e.standard ? '3GPP' : 'vendor') + '</td><td>' + (e.ok ? 'OK' : '<b>FAILED</b>: ' + esc(e.check)) + '</td></tr>';
+        }).join('') + '</table></div>';
+      x += '<p class="note">' + arr(O1.negative).map(function(n){ return 'Invalid edit (' + esc(n.what) + '): ' + (n.rejected ? 'rejected, ' + esc(n.reason) : '<b>not rejected</b>'); }).join('. ') + '.</p>';
+      x += '<details><summary class="note">The O1 edits (RFC 7951 JSON, one per site)</summary><pre style="white-space:pre-wrap;font-size:12px">' +
+            esc(JSON.stringify(O1.documents || {}, null, 1)) + '</pre></details>';
+    }
+  }
   $('extraBox').innerHTML = x;
   $('resNotes').textContent = arr(r.notes).join(' ');
 }

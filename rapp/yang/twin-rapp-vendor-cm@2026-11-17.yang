@@ -1,0 +1,47 @@
+module twin-rapp-vendor-cm {
+  yang-version 1.1;
+  namespace "urn:twin-in-the-loop-rapp:vendor-cm";
+  prefix tvcm;
+
+  organization "Twin-in-the-Loop rApp (artefact)";
+  description
+    "Cell parameters the twin-in-the-loop rApp's audit may change that the
+     3GPP NR network resource model (TS 28.541) does not carry: the OLLA
+     offset and the MCS cap (link adaptation, vendor-specific) and P0 nominal
+     PUSCH (set in RRC, TS 38.331, and configured through vendor-specific
+     configuration management). A stand-in for a vendor's own model, so the
+     rApp's O1 edits for these parameters can be type- and range-checked.";
+
+  revision 2026-11-17 {
+    description "Initial version.";
+  }
+
+  container vendor-cell-config {
+    description "Per-cell link-adaptation and uplink power-control settings.";
+    list cell {
+      key "site-id sector";
+      leaf site-id {
+        type string { length "1..64"; }
+        description "The site (tower) the cell belongs to.";
+      }
+      leaf sector {
+        type uint8 { range "1..3"; }
+        description "The sector of the site.";
+      }
+      leaf olla-offset-db {
+        type decimal64 { fraction-digits 2; range "-10.00..10.00"; }
+        units "dB";
+        description "Outer-loop link adaptation offset applied to the CQI-derived SINR.";
+      }
+      leaf mcs-cap {
+        type uint8 { range "0..28"; }
+        description "Highest downlink MCS index the scheduler may use.";
+      }
+      leaf p0-nominal-pusch-dbm {
+        type int16 { range "-202..24"; }
+        units "dBm";
+        description "p0-NominalWithGrant (TS 38.331): the nominal PUSCH power per RB.";
+      }
+    }
+  }
+}

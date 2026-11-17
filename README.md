@@ -88,6 +88,31 @@ endpoint accepts; it says nothing about their effect on the network (the
 simulator only stores policies, so their status stays NOT_ENFORCED). Capacity,
 OLLA and P0 changes are O1 configuration changes and are not part of this check.
 
+### O1 check (configuration changes against YANG)
+
+With `O1_CHECK = True` (the default) and a capacity, audit or all run, each
+recommended configuration change is written as an O1 edit (RFC 7951 JSON,
+merge) and every edited leaf is checked: it must exist in the YANG models, be
+writable, and its value must fit the leaf's type and range. Two out-of-range
+edits (a 400 deg tilt, a P0 of -250 dBm) must be rejected. Code:
+`rapp/o1_check.py`.
+
+| rApp change | O1 attribute | Model |
+|---|---|---|
+| Electrical tilt | `AntennaFunction/attributes/retTiltValue` (0.1 deg) | 3GPP TS 28.541 / 28.662 |
+| Azimuth | `NRSectorCarrier/CommonBeamformingFunction/attributes/digitalAzimuth` (0.1 deg from boresight) | 3GPP TS 28.541 |
+| Transmit power | `NRSectorCarrier/attributes/configuredMaxTxPower` (mW, on a 40 W stand-in) | 3GPP TS 28.541 |
+| OLLA offset, MCS cap, P0 nominal PUSCH | `vendor-cell-config/cell/...` | `rapp/yang/twin-rapp-vendor-cm` (3GPP has no attribute) |
+
+The 3GPP models are the Rel-18 NR NRM YANG from 3GPP Forge (`sa5/MnS`, tag
+`Tag_Rel18_SA113`), with two IETF type modules from YangModels; the check uses
+yangson, a pure-Python YANG library. Like the A1 check, the notebook downloads
+the pinned models and installs yangson into a folder of their own
+(`~/.cache/twin-rapp-o1`) on first use, the same on Colab and a Mac. This shows
+the edits are well-formed against the models; it is not a NETCONF exchange
+with a device, and it says nothing about a real gNB accepting them. Note that
+the 3GPP model gives `configuredMaxTxPower` no range (plain int32, mW).
+
 ### The console page: Run on my Mac or Run on Colab
 
 The [console page](https://ysrao.github.io/twin-in-the-loop-rapp/rapp-run.html)
