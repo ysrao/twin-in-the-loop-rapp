@@ -12,9 +12,18 @@ before it is recommended; nothing reaches the network ungated.
 
 **Functions** (each behind the twin gate): capacity (azimuth / tilt / power,
 single tower or cluster), slice PRB shares (single-step PPO, guarded
-acceptance), energy (carrier sleep in low-traffic hours), and an MCS / OLLA
-audit that recovers the gNB's effective link-adaptation offset from its MCS
-histograms.
+acceptance), energy (carrier sleep in low-traffic hours), and an audit: the
+MCS / OLLA check that recovers the gNB's effective link-adaptation offset from
+its MCS histograms, plus counter-based link checks (BLER / HARQ, MIMO rank, UL
+power control, load) on the daily PM counters.
+
+**Per tower.** In a cluster run each tower is judged by its own inputs: its
+radio configuration, its MCS histograms, its link counters and its network
+counters (`counters_by_site` in the run package). Slice picks a profile per
+tower, SYS-scored at that tower's offered load; energy plans carrier sleep per
+tower, and a tower at 85 % PRB use or more, or congested on 30 % of days or
+more in its link counters, keeps every carrier on. The built-in study counters
+are per tower: Tower B the recorded ones, Towers A and C dummy values.
 
 ## Run it
 
@@ -54,12 +63,26 @@ and energy tables - at the bottom of the page. Start it with
 `http://127.0.0.1:8765/rapp-run-local.html`). It listens on this Mac only.
 
 The study network (a San Francisco 1 km tile, three towers, recorded
-counters) and the open city scene are built in. The console page
-(`rapp-run.html`) is the advanced path: it builds a run package from your own
-sites and counters to paste into the notebook.
+counters) and the open city scene are built in.
+
+### The console page: Run on my Mac or Run on Colab
+
+The [console page](https://ysrao.github.io/twin-in-the-loop-rapp/rapp-run.html)
+(`rapp-run.html`) is where you choose the run: single tower (A, B or C) or
+cluster, the counter set for each tower (study, test counters 1-4, or your own
+CSV), and the function. Then press one of its two buttons; the same choice
+gives the same result on either:
+
+- **Run on my Mac** - start the local runner first (`.venv/bin/python
+  local/rapp_server.py`, or the Desktop launcher). The button opens the local
+  page with the run package in the link (it never leaves the Mac); the run
+  starts by itself and the result shows there.
+- **Run on Colab** - copies the run package and opens the notebook on Colab.
+  Click the package cell (it starts `PACKAGE_JSON`), select all, paste, then
+  Runtime > Run all. The result prints in the last cell.
 
 Synced with the full description: *Twin-in-the-Loop Optimisation as an rApp
-on a Virtual RIC*, v4, Nov 2026. Artefact v2, 16 Nov 2026.
+on a Virtual RIC*, v4, Nov 2026. Artefact v4, 17 Nov 2026.
 
 Code: MIT. Scene and data: CC BY 4.0 (city geometry from DataSF Building
 Footprints, CC0, and AWS Terrain Tiles).

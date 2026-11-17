@@ -27,6 +27,7 @@ textarea{width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,Consola
 canvas{border:1px solid #ccc;border-radius:6px;max-width:100%}
 .maps{display:flex;gap:18px;flex-wrap:wrap}
 .maps figure{margin:0}
+h4{margin:14px 0 4px}
 .maps figcaption{font-size:14px;text-align:center;margin-top:4px}
 </style>
 </head>
@@ -50,8 +51,10 @@ canvas{border:1px solid #ccc;border-radius:6px;max-width:100%}
 <h2>Step 2 — Network counters (ingested)</h2>
 <div class="box">
 <p style="margin-top:0">In deployment the Virtual RIC collects the SMO/OSS PM export automatically each cycle and parses the standard counters itself — the operator does not type them. Here the study network's recorded counters are pre-loaded; load your own export to replace them. <span class="note" id="counterSource">(Counters: the study network's recorded values. MCS histograms: Tower B recorded, Towers A and C dummy test files — the schema is the contract)</span></p>
-<p><span class="note">Test counters:</span> <button class="cntbtn sel" id="cnt-0" onclick="pickCounters(0)">Recorded (default)</button><button class="cntbtn" id="cnt-1" onclick="pickCounters(1)">Test counters 1 — Busy hour, congested</button><button class="cntbtn" id="cnt-2" onclick="pickCounters(2)">Test counters 2 — Night, low load</button><button class="cntbtn" id="cnt-3" onclick="pickCounters(3)">Test counters 3 — Edge coverage hole</button><button class="cntbtn" id="cnt-4" onclick="pickCounters(4)">Test counters 4 — URLLC-heavy slice</button></p>
-<p><label class="note" for="countersFile">Counters CSV:</label> <input type="file" id="countersFile" accept=".csv,text/csv"> <span class="note" id="counterSummary"></span></p>
+<p><span class="note">Test counters (sets every tower):</span> <button class="cntbtn sel" id="cnt-0" onclick="pickCounters(0)">Recorded (default)</button><button class="cntbtn" id="cnt-1" onclick="pickCounters(1)">Test counters 1 — Busy hour, congested</button><button class="cntbtn" id="cnt-2" onclick="pickCounters(2)">Test counters 2 — Night, low load</button><button class="cntbtn" id="cnt-3" onclick="pickCounters(3)">Test counters 3 — Edge coverage hole</button><button class="cntbtn" id="cnt-4" onclick="pickCounters(4)">Test counters 4 — URLLC-heavy slice</button></p>
+<div id="towerCounters"></div>
+<p class="msg err hidden" id="towerWarn"></p>
+<p><label class="note" for="countersFile">Counters CSV (becomes the <i>Custom</i> set):</label> <input type="file" id="countersFile" accept=".csv,text/csv"> <span class="note" id="counterSummary"></span></p>
 <p><label class="note" for="pmFile">PM MCS-histogram CSV (for the audit):</label> <input type="file" id="pmFile" accept=".csv,text/csv"> <span class="note" id="pmSummary">Columns: site_id, sector (1-3), mcs (0-27), grant_share, olla_offset_db, mcs_cap — one or several towers per file. In force: Tower B (recorded, <code>data/test_pm_mcs.csv</code>) and dummy test histograms for Towers A and C (<code>data/test_pm_mcs_tower_A.csv</code>, <code>_C.csv</code>; all three in <code>data/test_pm_mcs_all_towers.csv</code>).</span></p>
 <p><label class="note" for="linkFile">Link PM daily counters CSV (BLER, HARQ, rank, power control, load):</label> <input type="file" id="linkFile" accept=".csv,text/csv"> <label class="note" for="linkCfgFile">cell config CSV:</label> <input type="file" id="linkCfgFile" accept=".csv,text/csv"> <span class="note" id="linkSummary">In force: dummy counters for Towers A, B, C, 18 Aug – 18 Oct 2026 (<code>data/pm_synth/pm_daily_counters.csv</code> + <code>site_config.csv</code>).</span></p>
 <p class="msg err hidden" id="linkWarn"></p>
@@ -69,20 +72,43 @@ canvas{border:1px solid #ccc;border-radius:6px;max-width:100%}
 <button class="fnbtn" id="fn-energy" onclick="selectFn('energy')">Energy</button>
 <button class="fnbtn" id="fn-audit" onclick="selectFn('audit')">Audit</button>
 <button class="fnbtn" id="fn-all" onclick="selectFn('all')">All functions</button>
-<p>
-<button class="big" onclick="copyPackage()">1 &middot; Copy the package</button>
-<a class="btn big" href="https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb" target="_blank" rel="noopener">2 &middot; Open the runner notebook (Colab)</a>
+<p class="note" style="margin-bottom:4px">Run exactly what is chosen above (mode, tower, counters per tower, function) on either:</p>
+<p style="margin-top:0">
+<a class="btn big" id="macLink" href="http://127.0.0.1:8765/rapp-run-local.html" target="_blank" rel="noopener" onclick="return runOnMac(this)">Run on my Mac</a>
+<a class="btn big" id="colabLink" href="https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb" target="_blank" rel="noopener" onclick="return runOnColab(this)">Run on Colab</a>
 </p>
 <p class="msg hidden" id="pkgMsg"></p>
-<textarea id="pkgText" rows="12" readonly style="width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px"></textarea>
-<p class="note"><b>Or skip this page entirely:</b> the runner notebook stands alone — change MODE and FUNCTION at its top and Run all; the study network is built in. This page is the advanced path: the box below is the run package for the mode, function, sites and counters above, rebuilt whenever you change anything. Copy it, and in the notebook paste it over the whole <b>package cell</b> (click the cell, select all with Cmd/Ctrl+A, paste) — a pasted package overrides the notebook's own settings. Then Run all: the runner traces the twin with Sionna RT, scores with Sionna SYS, evaluates the existing configuration from the counter dump, runs the optimisation, and applies the twin gate. <b>The result prints in the notebook's last cell</b> — the changes, the before &rarr; after numbers and the maps. No files, no downloads.</p>
+<p class="note"><b>Mac</b> — Sionna RT on the Mac GPU. Start the local runner first (double-click <b>Run rApp v4</b> on the Desktop). The run starts by itself in a new tab and the result shows there.<br>
+<b>Colab</b> — Google's GPU, nothing to install. The button copies this run's package and opens the notebook. In Colab, click the package cell (the one that starts <code>PACKAGE_JSON</code>), select all (Cmd/Ctrl+A), paste, then <b>Runtime &rarr; Run all</b>. The result prints in the last cell.</p>
+<p class="note hidden" id="macUrlWrap">If no tab opened: <button onclick="copyMacUrl()">Copy the Mac link</button> then paste it into a new browser tab.<br><input id="macUrl" readonly style="width:100%;box-sizing:border-box;font-size:11px;font-family:ui-monospace,Menlo,monospace"></p>
+<div class="hidden" id="colabWrap"><p class="note" style="margin-bottom:2px">The package for Colab (if the copy did not work: <button onclick="copyColabText()">Copy the package</button>, or select the text and press Cmd/Ctrl+C):</p>
+<textarea id="colabText" rows="6" readonly></textarea></div>
+<p class="note">Either way the runner traces the twin with Sionna RT, scores with Sionna SYS, judges each tower's existing configuration by that tower's counters, runs the optimisation, and applies the twin gate before emitting anything.</p>
+
+<h2>Step 4 — The result: changes and improvement</h2>
+<p>Load the result file from the run: <input type="file" id="resultFile" accept=".json,application/json"></p>
+<p class="msg err hidden" id="resMsg"></p>
+<div id="results" class="hidden">
+<p id="resHead"></p>
+<h3>Recommended changes</h3>
+<div id="changesBox"></div>
+<div id="kpiBox"></div>
+<div class="maps" id="mapsBox">
+<figure><canvas id="mapBefore" width="320" height="320"></canvas><figcaption>Before — best-server RSRP (dBm per RE)</figcaption></figure>
+<figure><canvas id="mapAfter" width="320" height="320"></canvas><figcaption>After — best-server RSRP (dBm per RE)</figcaption></figure>
+</div>
+<div id="extraBox"></div>
+<p class="note" id="resNotes"></p>
+<button onclick="downloadResult()">Download the result / intent (JSON)</button>
+<p class="msg hidden" id="resDlMsg"></p>
+</div>
 
 <div class="box warn">
-<b>How the run works, honestly.</b> The optimisation itself — the ray-traced twin, the SYS link curve and slice environment, the guarded search, the audit's histogram fit — is the prototypes' own code, and it runs in the notebook (Sionna RT + SYS), not in this page: a static page cannot ray-trace. This page prepares the run package from the sites and the counter dump; the notebook runs it and its last cell presents what the twin verified. Nothing is emitted unless it passes the twin gate; a run that finds nothing worth changing says so and keeps the as-built configuration.
+<b>How the run works, honestly.</b> The optimisation itself — the ray-traced twin, the SYS link curve and slice environment, the guarded search, the audit's histogram fit — is the prototypes' own code, and it runs in the notebook (Sionna RT + SYS), not in this page: a static page cannot ray-trace. This page prepares the run from the sites and the counter dump and presents what the twin verified. Nothing is emitted unless it passes the twin gate; a run that finds nothing worth changing says so and keeps the as-built configuration.
 </div>
 
 <footer>
-<p class="note">Artefact v2 &middot; 16 Nov 2026 &middot; Full description: <i>Twin-in-the-Loop Optimisation as an rApp on a Virtual RIC</i>, v4, Nov 2026. <a href="index.html">Landing page</a></p>
+<p class="note">Artefact v4 &middot; 17 Nov 2026 &middot; Full description: <i>Twin-in-the-Loop Optimisation as an rApp on a Virtual RIC</i>, v4, Nov 2026. Study: <a href="https://doi.org/10.5281/zenodo.24210760">Zenodo DOI 10.5281/zenodo.24210760</a> &middot; <a href="https://github.com/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb">The runner notebook</a> &middot; <a href="index.html">Landing page</a></p>
 </footer>
 
 <script>
@@ -144,6 +170,7 @@ function loadLink(){
   catch (e) { showMsg('linkWarn', 'Link counters not loaded: ' + e.message + '.', 'err'); }
 }
 function pmInForce(){ try { return JSON.parse($('histJson').value) || {}; } catch (e) { return null; } }
+function refreshPkgText(){}
 var MODE = 'cluster', FN = 'capacity', RESULT = null, SINGLE = 'B';
 function setSingle(k){ SINGLE = k; showMsg('pkgMsg', ''); renderConfig(); }
 
@@ -166,7 +193,7 @@ function setMode(m){
   $('mode-cluster').className = (m === 'cluster') ? 'sel' : '';
   renderConfig();
 }
-function selectFn_(f){
+function selectFn(f){
   FN = f;
   ['capacity','slice','energy','audit','all'].forEach(function(x){ $('fn-' + x).className = 'fnbtn' + (x === f ? ' sel' : ''); });
   renderConfig();
@@ -197,7 +224,7 @@ function siteIssues(s){
   var noPm = s.filter(function(v){ return !pm[v.key]; }).map(function(v){ return v.name; });
   return { unknown: unknown, hasPm: noPm.length < s.length, noPm: noPm };
 }
-function renderConfig_(){
+function renderConfig(){
   var all = parseSites();
   if (all.length && !all.some(function(v){ return v.key === SINGLE; })) SINGLE = all[0].key;
   $('singlePick').className = (MODE === 'single') ? 'note' : 'note hidden';
@@ -225,10 +252,11 @@ function renderConfig_(){
            (i === 0 ? '<td rowspan="3">' + esc(v.power) + '</td>' : '') + '</tr>';
   });
   $('configTable').innerHTML = h + '</table>';
+  if ($('towerCounters') && typeof TEST_COUNTERS !== 'undefined') renderTowerCounters();
 }
-function parseCounters(){
+function parseCounters(text){
   var o = {};
-  $('countersCsv').value.trim().split(/\r?\n+/).slice(1).forEach(function(ln){
+  (text === undefined ? $('countersCsv').value : text).trim().split(/\r?\n+/).slice(1).forEach(function(ln){
     var i = ln.lastIndexOf(','); if (i < 0) return;
     o[ln.slice(0, i).trim()] = parseFloat(ln.slice(i + 1));
   });
@@ -237,7 +265,39 @@ function parseCounters(){
 function missingCounters(c){
   return REQUIRED_COUNTERS.filter(function(k){ return num(c[k]) === null; });
 }
-function counterSummary_(){
+// ---- counters per tower: each tower of the run is judged by its own counter set ----
+// Study: Tower B the recorded counters; Towers A and C dummy values in line with their
+// link counters (both near 55 % PRB use). Same values as the notebook's study counters.
+var STUDY_TOWER_CSV = {
+  A: "kpi,value\nmedian_dl_mbps,25\nmedian_ul_mbps,9\nedge_dl_mbps,4.2\nedge_ul_mbps,1.6\nfairness,0.38\nprb_util_pct,55\nsignalling_load,26\ncell_load,0.55\nshares_embb,0.60\nshares_urllc,0.20\nshares_mmtc,0.20\nlow_traffic_hours,8\ncarriers_per_site,2\n",
+  C: "kpi,value\nmedian_dl_mbps,26\nmedian_ul_mbps,6\nedge_dl_mbps,5.5\nedge_ul_mbps,0.9\nfairness,0.44\nprb_util_pct,55\nsignalling_load,24\ncell_load,0.55\nshares_embb,0.60\nshares_urllc,0.20\nshares_mmtc,0.20\nlow_traffic_hours,8\ncarriers_per_site,2\n"
+};
+var TOWER_CHOICE = {};   // tower key -> 'study' | '1'..'4' (test sets) | 'custom' (the CSV / text below)
+function towerChoice(k){ return TOWER_CHOICE[k] || 'study'; }
+function towerCsv(k){
+  var ch = towerChoice(k);
+  if (ch === 'custom') return $('countersCsv').value;
+  if (ch !== 'study') return TEST_COUNTERS[+ch - 1].csv;
+  return STUDY_TOWER_CSV[k] || COUNTERS_DEFAULT;
+}
+function setTowerChoice(k, v){ TOWER_CHOICE[k] = v; markCounters(-1); renderTowerCounters(); showMsg('pkgMsg', ''); }
+function renderTowerCounters(){
+  var s = activeSites(), bad = [];
+  var opts = [['study', 'Study (this tower)']].concat(TEST_COUNTERS.map(function(t, i){ return [String(i + 1), 'Test counters ' + (i + 1) + ' — ' + t.label]; })).concat([['custom', 'Custom (the CSV below)']]);
+  var h = '<table><tr><th>Tower</th><th>Counter set</th><th>PRB use</th><th>Cell load</th><th>Low-traffic hours</th><th>Carriers</th><th>Median / edge DL (Mbps)</th></tr>';
+  s.forEach(function(v){
+    var c = parseCounters(towerCsv(v.key)), miss = missingCounters(c);
+    if (miss.length) bad.push('Tower ' + v.name + ': ' + miss.join(', '));
+    function show(x, u){ return num(x) === null ? '—' : esc(x) + (u || ''); }
+    h += '<tr><td>Tower ' + esc(v.name) + '</td><td><select data-k="' + esc(v.key) + '" aria-label="Counter set for Tower ' + esc(v.name) + '">' + opts.map(function(o){
+           return '<option value="' + o[0] + '"' + (o[0] === towerChoice(v.key) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
+         '</select></td><td>' + show(c.prb_util_pct, ' %') + '</td><td>' + show(c.cell_load) + '</td><td>' + show(c.low_traffic_hours) +
+         '</td><td>' + show(c.carriers_per_site) + '</td><td>' + show(c.median_dl_mbps) + ' / ' + show(c.edge_dl_mbps) + '</td></tr>';
+  });
+  $('towerCounters').innerHTML = h + '</table>';
+  showMsg('towerWarn', bad.length ? 'Missing or non-numeric counters needed by the run — ' + bad.join('; ') + '.' : '', 'err');
+}
+function counterSummary(){
   var c = parseCounters();
   function show(v, u){ return num(v) === null ? '—' : v + (u || ''); }
   $('counterSummary').textContent = 'In force: coverage ' + show(c.coverage_pct, '%') + ', median RSRP ' + show(c.median_rsrp_dbm, ' dBm') +
@@ -245,12 +305,22 @@ function counterSummary_(){
   var miss = missingCounters(c);
   if (miss.length) { $('counterWarn').textContent = 'Missing or non-numeric counters needed by the run: ' + miss.join(', ') + '.'; $('counterWarn').className = 'msg err'; }
   else $('counterWarn').className = 'msg err hidden';
+  if ($('towerCounters')) renderTowerCounters();
+}
+function pkgCounters(c){
+  return { median_dl: c.median_dl_mbps, median_ul: c.median_ul_mbps, edge_dl: c.edge_dl_mbps,
+    edge_ul: c.edge_ul_mbps, fairness: c.fairness, prb_util: c.prb_util_pct, signalling: c.signalling_load,
+    load: c.cell_load, low_hours: c.low_traffic_hours, carriers_per_site: c.carriers_per_site,
+    current_shares: [c.shares_embb, c.shares_urllc, c.shares_mmtc] };
 }
 function buildPackage(){
-  var c = parseCounters();
-  var miss = missingCounters(c);
-  if (miss.length) throw new Error('Missing or non-numeric counters: ' + miss.join(', ') + '.');
   var active = activeSites();
+  var byTower = {};
+  active.forEach(function(v){
+    var c = parseCounters(towerCsv(v.key)), miss = missingCounters(c);
+    if (miss.length) throw new Error('Tower ' + v.name + ' (' + towerChoice(v.key) + ' counters): missing or non-numeric ' + miss.join(', ') + '.');
+    byTower['sf-twin-tower-' + v.key] = pkgCounters(c);
+  });
   if (!active.length) throw new Error('No valid site rows (each row needs 8 comma-separated fields).');
   var iss = siteIssues(active);
   if (iss.unknown.length && !$('allowDefaults').checked)
@@ -287,39 +357,235 @@ function buildPackage(){
     // Contract kept as before: a list in single mode, keyed by site_id in cluster mode.
     policy: { traffic_shares_projected: (MODE === 'single' ? (sites[0]._proj || sites[0].traffic_shares_current) : proj),
               min_coverage_delta_pts: 0.0, max_edge_drop_db: 1.0 },
-    counters: { median_dl: c.median_dl_mbps, median_ul: c.median_ul_mbps, edge_dl: c.edge_dl_mbps,
-      edge_ul: c.edge_ul_mbps, fairness: c.fairness, prb_util: c.prb_util_pct, signalling: c.signalling_load,
-      load: c.cell_load, low_hours: c.low_traffic_hours, carriers_per_site: c.carriers_per_site,
-      current_shares: [c.shares_embb, c.shares_urllc, c.shares_mmtc] },
+    // counters: the first tower's set (for one-set readers); counters_by_site: every tower's own set
+    counters: byTower[sites[0].site_id],
+    counters_by_site: byTower,
     pm: pmSites[0],
     pm_sites: pmSites,
     link_pm: LINK_PM.filter(function(e){ return active.some(function(v){ return e.site_id === 'sf-twin-tower-' + v.key; }); }) };
 }
 
 // Saving: inside a Claude artifact use the downloads capability; on a normal web host fall back to a link download.
-function refreshPkgText(){
-  var t = $('pkgText'); if (!t) return;
-  try { t.value = "PACKAGE_JSON = r'''" + String.fromCharCode(10) + JSON.stringify(buildPackage(), null, 1) + String.fromCharCode(10) + "'''"; }
-  catch(e){ t.value = '(the package cannot be built yet: ' + e.message + ')'; }
+var DL = null;
+if (window.claude && typeof window.claude.use === 'function') {
+  window.claude.use('downloads').then(function(d){ DL = d; }, function(){ DL = null; });
 }
-function copyPackage(){
-  refreshPkgText();
-  var t = $('pkgText');
-  t.focus(); t.select();
-  function done(){ showMsg('pkgMsg', 'Copied — in the notebook click the second cell, select all (Cmd/Ctrl+A) and paste over it, then Run all. The result prints in the last cell.', 'ok'); }
-  function fail(){ showMsg('pkgMsg', 'Copy failed — click in the box, select all (Ctrl/Cmd+A) and copy manually.', 'err'); }
-  if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(t.value).then(done, function(){ try { document.execCommand('copy'); done(); } catch(e){ fail(); } });
-  } else {
-    try { document.execCommand('copy'); done(); } catch(e){ fail(); }
+function saveJson(filename, obj, msgId){
+  var text = JSON.stringify(obj, null, 1);
+  if (DL) {
+    return DL.save({ filename: filename, data: text }).then(function(){
+      showMsg(msgId, 'Saved ' + filename + '.', 'ok');
+    }, function(e){
+      var code = e && e.code;
+      if (code === 'declined') showMsg(msgId, 'Download cancelled.', 'wrn');
+      else if (code === 'rate_limited') showMsg(msgId, 'A save prompt is already open — finish it, then try again.', 'wrn');
+      else showMsg(msgId, 'Could not save here (' + (code || 'unavailable') + ').', 'err');
+    });
+  }
+  try {
+    var blob = new Blob([text], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+    showMsg(msgId, 'Downloading ' + filename + '…', 'ok');
+  } catch (e) {
+    showMsg(msgId, 'This browser could not start the download: ' + e.message, 'err');
   }
 }
+function downloadPackage(){
+  var pkg;
+  try { pkg = buildPackage(); }
+  catch (e) { showMsg('pkgMsg', e.message, 'err'); return; }
+  saveJson('rapp_run_package.json', pkg, 'pkgMsg');
+}
+// Mac path: hand this run's package to the local runner page in the URL hash (never sent to any server but this Mac).
+var MAC_PAGE = 'http://127.0.0.1:8765/rapp-run-local.html';
+// A plain link (like the Colab one): its href is set to this run just before the browser follows it.
+function runOnMac(a){
+  var pkg;
+  try { pkg = buildPackage(); }
+  catch (e) { showMsg('pkgMsg', e.message, 'err'); return false; }
+  var url = MAC_PAGE + '#pkg=' + encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(pkg)))));
+  a.href = url;
+  var box = $('macUrl');
+  box.value = url; $('macUrlWrap').className = 'note';
+  showMsg('pkgMsg', 'Sent to the Mac runner: ' + MODE + (MODE === 'single' ? ' (Tower ' + pkg.sites[0].label.replace('Tower ', '') + ')' : '') + ', ' + FN + '. The run starts in the new tab. If no tab opened, copy the link below into a new browser tab.', 'ok');
+  return true;
+}
+// Colab path: the package cell's text (the form the notebook's package cell takes),
+// copied to the clipboard while the link opens the notebook in a new tab.
+function packageCellText(pkg){
+  var q3 = "'".repeat(3);
+  return 'PACKAGE_JSON = r' + q3 + '\n' + JSON.stringify(pkg, null, 1).replace(/'/g, '\\u0027') + '\n' + q3 + '\n';
+}
+function runOnColab(a){
+  var pkg;
+  try { pkg = buildPackage(); }
+  catch (e) { showMsg('pkgMsg', 'Cannot run yet: ' + e.message, 'err'); return false; }
+  var t = $('colabText'); t.value = packageCellText(pkg); $('colabWrap').className = '';
+  var what = MODE + (MODE === 'single' ? ' (' + pkg.sites[0].label + ')' : '') + ', ' + FN;
+  function ok(){ showMsg('pkgMsg', 'Package copied (' + what + ') and Colab opened in a new tab. In the notebook, click the package cell, select all, paste, then Runtime → Run all.', 'ok'); }
+  function manual(){ showMsg('pkgMsg', 'Colab opened in a new tab, but the browser did not allow the copy. Copy the package from the box below, then paste it over the package cell.', 'wrn'); }
+  function fallback(){ t.select(); try { if (document.execCommand('copy')) ok(); else manual(); } catch (e) { manual(); } }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(ok, fallback);
+    else fallback();
+  } catch (e) { manual(); }
+  return true;
+}
+function copyColabText(){
+  var t = $('colabText'); t.focus(); t.select();
+  try { (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject()).then(
+    function(){ showMsg('pkgMsg', 'Package copied. Paste it over the package cell in Colab.', 'ok'); },
+    function(){ document.execCommand('copy'); showMsg('pkgMsg', 'Package copied. Paste it over the package cell in Colab.', 'ok'); }); }
+  catch (e) { showMsg('pkgMsg', 'Select the text in the box and copy it (Cmd/Ctrl+C).', 'wrn'); }
+}
+function copyMacUrl(){
+  var box = $('macUrl'); box.focus(); box.select();
+  try { (navigator.clipboard ? navigator.clipboard.writeText(box.value) : Promise.reject()).then(
+    function(){ showMsg('pkgMsg', 'Mac link copied. Paste it into a new browser tab.', 'ok'); },
+    function(){ document.execCommand('copy'); showMsg('pkgMsg', 'Mac link copied. Paste it into a new browser tab.', 'ok'); }); }
+  catch (e) { showMsg('pkgMsg', 'Select the link in the box and copy it (Cmd+C).', 'wrn'); }
+}
+function downloadResult(){
+  if (!RESULT) return;
+  saveJson('rapp_result.json', RESULT, 'resDlMsg');
+}
+
 function fmt(v, d){ return (v === null || v === undefined || v === '' || !isFinite(v)) ? '—' : (+v).toFixed(d === undefined ? 1 : d); }
 function fmt0(v){ return fmt(v, 0); }
 function signed(v, d){ var s = fmt(v, d); return (s !== '—' && +v > 0) ? '+' + s : s; }
 function arr(v){ return Array.isArray(v) ? v : []; }
 function siteLabel(sid){ return esc(String(sid).replace('sf-twin-tower-', 'Tower ')); }
 
+function renderResult(r){
+  if (!r || typeof r !== 'object') throw new Error('the file does not contain a JSON object');
+  RESULT = r;
+  $('results').className = '';
+  showMsg('resDlMsg', '');
+  var prov = [];
+  if (r.provenance) prov.push(r.provenance);
+  (arr(r.slices).length ? r.slices : (r.slice ? [r.slice] : [])).forEach(function(S){ if (S.provenance) prov.push((S.site ? siteLabel(S.site) + ' ' : '') + S.provenance); });
+  $('resHead').innerHTML = '<b>Run result</b> — mode: ' + esc(r.mode || '—') + ', function: ' + esc(r['function'] || '—') +
+    (prov.length ? ' · provenance: <b>' + prov.map(esc).join(' / ') + '</b>' : '');
+
+  var h = '';
+  var changes = arr(r.changes);
+  if (changes.length) h = '<ul>' + changes.map(function(c){ return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
+  else h = '<p>No changes — the twin gate kept the as-built configuration.</p>';
+  if (r.configs_before && r.configs_after && typeof r.configs_before === 'object') {
+    h += '<table><tr><th>Site</th><th></th><th>Azimuths</th><th>Tilts</th><th>Power</th></tr>';
+    Object.keys(r.configs_before).forEach(function(sid){
+      var b = r.configs_before[sid] || {}, a = r.configs_after[sid];
+      var lbl = siteLabel(sid);
+      function row(name, cfg){
+        return '<td>' + name + '</td><td>' + arr(cfg.azimuths).map(fmt0).join(' / ') + '</td><td>' + arr(cfg.tilts).map(fmt0).join(' / ') +
+          '</td><td>' + fmt(cfg.power_offset_db, 0) + ' dB</td>';
+      }
+      if (a) {
+        h += '<tr><td rowspan="2">' + lbl + '</td>' + row('existing', b) + '</tr>';
+        h += '<tr>' + row('<b>recommended</b>', a) + '</tr>';
+      } else {
+        h += '<tr><td>' + lbl + '</td>' + row('existing (no recommendation in file)', b) + '</tr>';
+      }
+    });
+    h += '</table>';
+  }
+  $('changesBox').innerHTML = h;
+
+  var k = '';
+  if (r.kpis_before && r.kpis_after) {
+    var rows = [['Coverage (&ge; -90 dBm per RE)', 'coverage_pct', '%', 1], ['Median RSRP', 'median_rsrp', ' dBm', 1],
+      ['Cell-edge RSRP (p5)', 'edge_rsrp_p5', ' dBm', 1], ['Median SINR', 'median_sinr', ' dB', 1],
+      ['Traffic-weighted spectral efficiency', 'capacity_weighted_se', ' bit/s/Hz', 2]];
+    k = '<h3>Performance — before &rarr; after (projected traffic, twin-scored)</h3><table><tr><th>Metric</th><th>Before</th><th>After</th><th>Change</th></tr>' +
+      rows.map(function(row){
+        var b = r.kpis_before[row[1]], a = r.kpis_after[row[1]];
+        var fb = fmt(b, row[3]), fa = fmt(a, row[3]);
+        var delta = (fb !== '—' && fa !== '—') ? (a - b >= 0 ? '+' : '') + fmt(a - b, row[3]) : '—';
+        return '<tr><td>' + row[0] + '</td><td>' + fb + (fb !== '—' ? row[2] : '') + '</td><td>' + fa + (fa !== '—' ? row[2] : '') + '</td><td>' + delta + '</td></tr>';
+      }).join('') + '</table>';
+  }
+  $('kpiBox').innerHTML = k;
+
+  var m = r.maps;
+  if (m && Array.isArray(m.x) && Array.isArray(m.y) && Array.isArray(m.before) && Array.isArray(m.after) && m.x.length) {
+    $('mapsBox').style.display = '';
+    drawMap($('mapBefore'), m, 'before'); drawMap($('mapAfter'), m, 'after');
+  } else $('mapsBox').style.display = 'none';
+
+  var x = '';
+  (arr(r.slices).length ? r.slices : (r.slice ? [r.slice] : [])).forEach(function(S){
+    var profiles = arr(S.profiles);
+    x += '<h3>Slice / PRB' + (S.site ? ' — ' + siteLabel(S.site) : '') + ' — SYS-scored profiles</h3><p>Existing reward from this tower\'s counters: <b>' + fmt(S.counters_reward, 2) +
+      '</b>' + (num(S.load) !== null ? ' (profiles scored at its offered load ' + fmt(S.load, 2) + ')' : '') + '. Chosen profile: <b>' + esc(S.chosen_profile || '—') + '</b> (current: ' + esc(S.current_profile || '—') + ').</p>';
+    if (profiles.length)
+      x += '<table><tr><th>Profile</th><th>PRB shares eMBB/URLLC/mMTC</th><th>Scheduler</th><th>Reward (SYS env)</th></tr>' +
+        profiles.map(function(pr){
+          return '<tr' + (pr.name === S.chosen_profile ? ' style="background:#e7f6ea"' : '') + '><td>' + esc(pr.name) + '</td><td>' +
+            arr(pr.shares).map(function(v){ return fmt(100 * v, 0); }).join(' / ') + '</td><td>' + esc(pr.scheduler) + '</td><td>' + fmt(pr.reward, 2) + '</td></tr>';
+        }).join('') + '</table>';
+  });
+  var AUD = (r.audits && r.audits.length) ? r.audits : (r.audit ? [r.audit] : []);
+  AUD.forEach(function(A) {
+    x += '<h3>Audit — ' + siteLabel(A.site || '—') + '</h3><table><tr><th>Sector</th><th>Twin mean MCS</th><th>PM mean MCS</th><th>Fitted effective offset</th><th>Correction</th><th>Twin-verified SE gain</th><th>Fit L1</th></tr>' +
+      arr(A.sectors).map(function(s, i){
+        s = s || {};
+        var corr = (s.recommendation && num(s.recommendation.olla_offset_adjustment_db) !== null)
+          ? signed(s.recommendation.olla_offset_adjustment_db, 2) + ' dB' : 'none';
+        return '<tr><td>' + (i + 1) + '</td><td>' + fmt(s.twin_mean_mcs, 1) + '</td><td>' + fmt(s.pm_mean_mcs, 1) + '</td><td>' +
+          fmt(s.estimated_effective_offset_db, 2) + ' dB</td><td>' + corr + '</td><td>' +
+          (num(s.se_gain_relative) !== null ? fmt(100 * s.se_gain_relative, 1) + '%' : '—') + '</td><td>' + fmt(s.histogram_l1_distance, 2) + '</td></tr>';
+      }).join('') + '</table>';
+  });
+  if (r.link_audits && r.link_audits.length) {
+    x += '<h3>Link audit — BLER / HARQ, MIMO, UL power control, load</h3><p class="note">Counter-based checks on the daily PM medians (not twin-verified). Where the measured BLER is above target, the BLER-based OLLA change replaces any MCS-histogram OLLA change on that cell.</p>';
+    r.link_audits.forEach(function(La){
+      x += '<h4>' + siteLabel(La.site) + '</h4><table><tr><th>Sector</th><th>Area</th><th>Severity</th><th>Evidence (daily median)</th><th>Recommendation</th></tr>';
+      arr(La.cells).forEach(function(c){
+        var f = arr(c.findings);
+        if (!f.length) x += '<tr><td>' + esc(c.sector) + '</td><td colspan="4">within limits</td></tr>';
+        f.forEach(function(q){
+          x += '<tr><td>' + esc(c.sector) + '</td><td>' + esc(q.area) + '</td><td>' + (q.severity === 'high' ? '<b>high</b>' : esc(q.severity)) + '</td><td>' + esc(q.evidence) + '</td><td>' + esc(q.recommendation) + '</td></tr>';
+        });
+      });
+      x += '</table>';
+    });
+  }
+  if (r.energy) {
+    x += '<h3>Energy</h3><p>Energy index <b>100 &rarr; ' + fmt(r.energy.index_after, 1) + '</b> (saving ' + fmt(r.energy.saving_pct, 1) + '%' + (arr(r.energy.per_site).length > 1 ? ', mean over the towers' : '') + ').</p>';
+    if (arr(r.energy.per_site).length)
+      x += '<table><tr><th>Tower</th><th>PRB use (%)</th><th>Congested days (%)</th><th>Low-traffic hours</th><th>Carriers</th><th>Sleep</th><th>Energy index</th></tr>' +
+        r.energy.per_site.map(function(p){ return '<tr><td>' + siteLabel(p.site) + '</td><td>' + fmt(p.prb_util, 0) + '</td><td>' + fmt(p.congested_days_pct, 0) + '</td><td>' + fmt(p.low_hours, 0) +
+          '</td><td>' + esc(p.carriers) + '</td><td>' + (p.sleep ? 'yes' : '<b>no</b>') + '</td><td>' + fmt(p.index_after, 1) + '</td></tr>'; }).join('') +
+        '</table><p class="note">Each tower is planned from its own counters. A tower at 85 % PRB use or more, or congested on 30 % of days or more in its link counters, keeps every carrier on.</p>';
+  }
+  $('extraBox').innerHTML = x;
+  $('resNotes').textContent = arr(r.notes).join(' ');
+}
+function drawMap(cv, maps, key){
+  var ctx = cv.getContext('2d'), W = cv.width, H = cv.height, PAD = 20, LEG = 18;
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  var xs = maps.x, ys = maps.y, vs = maps[key];
+  var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+  var sc = Math.min((W - 2 * PAD) / Math.max(x1 - x0, 1), (H - 2 * PAD - LEG) / Math.max(y1 - y0, 1));
+  for (var i = 0; i < xs.length; i++) {
+    var v = vs[i];
+    if (v === null || v === undefined || !isFinite(v)) continue;
+    var t = Math.max(0, Math.min(1, (v + 140) / 80));
+    ctx.fillStyle = 'hsl(' + Math.round(240 - 240 * t) + ',85%,45%)';
+    ctx.fillRect(PAD + (xs[i] - x0) * sc - 3, H - LEG - PAD - (ys[i] - y0) * sc - 3, 6, 6);
+  }
+  // colour-scale legend strip below the map
+  for (var j = 0; j < W - 80; j++) {
+    ctx.fillStyle = 'hsl(' + Math.round(240 - 240 * j / (W - 81)) + ',85%,45%)';
+    ctx.fillRect(40 + j, H - 12, 1, 8);
+  }
+  ctx.fillStyle = '#000'; ctx.font = '10px sans-serif';
+  ctx.fillText('-140', 6, H - 4); ctx.fillText('-60 dBm', W - 38, H - 4);
+}
 function readFile(input, target, cb){
   var f = input.files[0]; if (!f) return;
   var rd = new FileReader();
@@ -332,6 +598,7 @@ $('histJson').value = JSON.stringify(pmDefault());
 $('sitesFile').addEventListener('change', function(){ readFile(this, 'sitesCsv', renderConfig); });
 $('countersFile').addEventListener('change', function(){
   readFile(this, 'countersCsv', function(t, name){
+    parseSites().forEach(function(v){ TOWER_CHOICE[v.key] = 'custom'; });
     markCounters(-1);
     $('counterSource').textContent = '(Counters: loaded from ' + name + '. MCS histograms: Tower B recorded, Towers A and C dummy test files — edit below to replace)';
     counterSummary();
@@ -347,17 +614,15 @@ function pickCounters(n){
   $("countersFile").value = "";
   $("counterSource").textContent = t ? "(Counters: Test counters " + n + " — " + t.label + " (" + t.name + "), dummy values. MCS histograms: Tower B recorded, Towers A and C dummy test files)"
     : "(Counters: the study network's recorded values. MCS histograms: Tower B recorded, Towers A and C dummy test files — the schema is the contract)";
+  parseSites().forEach(function(v){ TOWER_CHOICE[v.key] = (n === 0 ? 'study' : String(n)); });
   markCounters(n); counterSummary();
 }
 $('sitesCsv').addEventListener('input', renderConfig);
 $('singleBtns').addEventListener('click', function(e){ var b = e.target.closest('button[data-k]'); if (b) setSingle(b.getAttribute('data-k')); });
 $('allowDefaults').addEventListener('change', function(){ showMsg('pkgMsg', ''); });
 $('countersCsv').addEventListener('input', counterSummary);
+$('towerCounters').addEventListener('change', function(e){ var s = e.target.closest('select[data-k]'); if (s) setTowerChoice(s.getAttribute('data-k'), s.value); });
 $('histJson').addEventListener('input', renderConfig);
-function renderConfig(){ renderConfig_(); refreshPkgText(); }
-function counterSummary(){ counterSummary_(); refreshPkgText(); }
-function selectFn(f){ selectFn_(f); refreshPkgText(); }
-
 // ---- PM CSV -> MCS histograms + configured OLLA offset / MCS cap ----------
 function setCounter(key, val){
   var lines = $('countersCsv').value.trim().split(/\r?\n/), found = false;
@@ -408,7 +673,13 @@ function loadPmCsv(text, name){
 $('pmFile').addEventListener('change', function(){ readFile(this, null, loadPmCsv); });
 $('linkFile').addEventListener('change', function(){ readFile(this, null, function(t){ LINK_PM_TEXT = t; loadLink(); }); });
 $('linkCfgFile').addEventListener('change', function(){ readFile(this, null, function(t){ LINK_CFG_TEXT = t; loadLink(); }); });
-refreshPkgText();
+$('resultFile').addEventListener('change', function(){
+  readFile(this, null, function(t){
+    try { renderResult(JSON.parse(t)); showMsg('resMsg', ''); }
+    catch (e) { $('results').className = 'hidden'; RESULT = null; showMsg('resMsg', 'That file is not a valid run result: ' + e.message, 'err'); }
+  });
+});
+setMode('cluster'); selectFn('capacity'); counterSummary();
 </script>
 </body>
 </html>
