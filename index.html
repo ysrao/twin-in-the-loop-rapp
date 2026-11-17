@@ -13,12 +13,48 @@ a.card:hover{border-color:#2e9e44}
 a.card b{font-size:18px}
 a.card span{color:#555;display:block;margin-top:4px}
 </style>
+<style>
+.sec{margin:26px 0 8px;font-size:19px}
+table.kv{border-collapse:collapse;width:100%;margin:8px 0 4px}
+table.kv td,table.kv th{border:1px solid #d8dce3;padding:7px 9px;font-size:14px;vertical-align:top;text-align:left}
+table.kv th{background:#f2f4f7;width:150px}
+p.body{font-size:14.5px;line-height:1.55;margin:8px 0}
+ul.body{font-size:14.5px;line-height:1.55;margin:6px 0 6px 18px;padding:0}
+code{background:#f2f4f7;padding:1px 5px;border-radius:4px;font-size:13px}
+.runbox{border:1.5px solid #2b6cb0;border-radius:10px;padding:12px 16px;margin:14px 0;background:#f4f8fd}
+</style>
 </head>
 <body>
 <h1>Twin-in-the-Loop rApp on a Virtual RIC</h1>
-<p class="sub">Twin-gated RAN optimisation as an rApp on a standalone Virtual RIC: a Sionna RT digital twin scores every candidate change before it is recommended. Four functions &mdash; capacity (azimuth / tilt / power), slice PRB shares, energy, and an MCS / OLLA audit &mdash; each behind the twin gate.</p>
-<a class="card" href="https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb"><b>Runner notebook (Colab)</b><span>The rApp itself, standalone: change MODE, FUNCTION and COUNTER_SET at the top, Run all, and read the result in the last cell. The study network and the test counter sets are built in; it also runs locally in Jupyter, with no Google account.</span></a>
-<a class="card" href="rapp-run.html"><b>Run the rApp &mdash; console</b><span>The advanced path: choose a single tower or the cluster, see the existing radio configuration, ingest counters, select the function, and copy the run package into the notebook. No files, no downloads.</span></a>
+<p class="sub">Twin-gated RAN optimisation as an rApp on a standalone Virtual RIC &mdash; a software Non-RT RIC and its rApps running outside an SMO, on the operator's own machine, connected to the RAN and OSS over open interfaces. A Sionna RT digital twin scores every candidate change before it is recommended: nothing reaches the network ungated.</p>
+
+<div class="runbox">
+<p class="body" style="margin-top:2px"><b>Run it &mdash; the artefact is the notebook.</b> Open the <a href="https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb"><b>runner notebook in Colab</b></a>, change the settings at the top, and Run all. The result &mdash; recommended changes, before &rarr; after numbers and the maps &mdash; prints in the last cell.</p>
+<ul class="body">
+<li><code>MODE</code> &mdash; "single" (one tower) or "cluster" (Towers A + B + C)</li>
+<li><code>SITE</code> &mdash; single mode only: "A", "B" or "C"</li>
+<li><code>FUNCTION</code> &mdash; "capacity", "slice", "energy", "audit" or "all"</li>
+<li><code>COUNTER_SET</code> &mdash; "study", "test1", "test2", "test3", or "operator" (your own counter dump, edited into the notebook)</li>
+</ul>
+<p class="body">The study network &mdash; a San Francisco 1 km&sup2; tile, three towers, their recorded counters and the open city scene &mdash; is built in. Nothing to download, upload or paste. The notebook also runs locally in Jupyter (a Mac or an operator's machine), with no Google account; it detects Colab vs local, GPU vs CPU, by itself. The <a href="rapp-run.html">console page</a> is the advanced path: it builds a run package from your own sites and counters to paste into the notebook.</p>
+</div>
+
+<h2 class="sec">The four functions, with their verified results</h2>
+<table class="kv">
+<tr><th>Capacity</th><td><b>What:</b> azimuth, tilt and power per sector, searched by the twin under guardrails (coverage may not fall, cell-edge may not drop beyond 1 dB). <b>Recorded run, Tower B:</b> coverage 81.3% &rarr; 88.8%, median RSRP &minus;79.5 &rarr; &minus;77.6 dBm, weighted spectral efficiency 2.82 &rarr; 2.93 bit/s/Hz. <b>Cluster (A+B+C, interference computed, not margined):</b> traffic coverage 39.5% &rarr; 40.9%, SE 2.08 &rarr; 2.26 on its own receiver set.</td></tr>
+<tr><th>Slice</th><td><b>What:</b> PRB shares among eMBB / URLLC / mMTC, chosen by a single-step PPO policy under guarded acceptance. <b>Held-out score:</b> policy 35.39 vs rule baseline 34.31, at or above baseline in 8 of 9 evaluation cells. The same PPO core was validated across capacity (DL peak +1.60%), cell-edge users (+5.19%) and energy (+7.21%) &mdash; all four KPIs improved on all 5 seeds. The twin's antenna geometry, by contrast, is physics plus guarded search, not AI.</td></tr>
+<tr><th>Energy</th><td><b>What:</b> carrier sleep in low-traffic hours, anchored on the RANOpt-validated +7.21% energy result. <b>Study case:</b> energy index 100 &rarr; 92.8 &mdash; sleep 1 of Tower B's 2 carriers for 6 low-traffic hours a night, 1 carrier kept on, slice floors and the twin coverage guardrail applied.</td></tr>
+<tr><th>Audit</th><td><b>What:</b> an MCS / OLLA audit &mdash; the twin derives the reference MCS distribution; the audit recovers the gNB's <i>effective</i> OLLA offset from its reported MCS histograms and proposes a bounded correction (&plusmn;4 dB, action threshold 1 dB). <b>Controlled test:</b> a hidden &minus;3 dB fault was recovered exactly (&minus;3.00 dB on all 3 sectors) and its correction restored +15&ndash;17% spectral efficiency; a healthy gNB drew an estimate of 0.00 dB and no action.</td></tr>
+</table>
+
+<h2 class="sec">How it works</h2>
+<p class="body">Performance counters flow one way: gNBs report standard 3GPP PM counters to the vendor NMS (Ericsson ENM, Nokia NetAct), which exports them in bulk; the Virtual RIC ingests those files read-only &mdash; it never talks to a gNB and has no write path to the network. Inside, Sionna RT traces the twin over the city scene and Sionna SYS (PHYAbstraction) turns SINR into MCS and throughput; candidates are scored, the twin gate accepts or rejects, and what leaves the box is a configuration <i>intent</i>. In the pilot, a human approves through the operator's normal change process. The loop is the slow loop by design &mdash; minutes to hours, not milliseconds: per-TTI scheduling stays in the DU, where it belongs. The box itself is appliance-class (a $650&ndash;$1,000 one-time purchase); no GPU is required, the twin trace simply takes minutes on CPU instead of seconds.</p>
+
+<h2 class="sec">Status and limits</h2>
+<p class="body">Verified end-to-end on the study network, in the open, from this page. What it is not yet: the PM data is a schema-faithful stand-in until an operator's real counter dump arrives &mdash; the ask is a single-tower offline pilot, read-only, no write path. Johannesburg-class map data is the known constraint on building a twin scene elsewhere; the runner is portable, so the scene can be built and run on the operator's side with their licensed data. Distribution routes: Ericsson's EIAP rApp Directory (ecosystem membership requested and under review; then SDK packaging, Developer Lab testing and certification), and Nokia's MantaRay Marketplace (partnership first). The Virtual RIC track needs neither &mdash; it is the operator's own deployment.</p>
+
+<a class="card" href="https://colab.research.google.com/github/ysrao/twin-in-the-loop-rapp/blob/main/notebook/rapp_run.ipynb"><b>Runner notebook (Colab)</b><span>The rApp itself, standalone: set MODE, SITE, FUNCTION and COUNTER_SET at the top, Run all, read the last cell.</span></a>
+<a class="card" href="rapp-run.html"><b>Run the rApp &mdash; console</b><span>The advanced path: build a run package with your own sites and counters and paste it into the notebook.</span></a>
 <a class="card" href="https://github.com/ysrao/twin-in-the-loop-rapp"><b>Source</b><span>The runner notebook, the console page, the engine modules (twin, guarded search, cluster, MCS audit, SYS environment, PPO policy) and the open city scene the twin traces.</span></a>
 <p class="note">Artefact v2 &middot; 16 Nov 2026 &middot; Synced with the full description: <i>Twin-in-the-Loop Optimisation as an rApp on a Virtual RIC</i>, v4, Nov 2026 &middot; DigitalTwinSim</p>
 </body>

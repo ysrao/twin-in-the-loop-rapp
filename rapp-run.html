@@ -35,8 +35,9 @@ canvas{border:1px solid #ccc;border-radius:6px;max-width:100%}
 <p class="sub"><b>Twin-in-the-Loop Optimisation as an rApp on a Virtual RIC</b> — the working companion to the full description (v4). This page is the Virtual RIC console: prepare the run, the runner executes it with <b>Sionna RT and Sionna SYS</b> through the twin gate (§9 of the description), and the result comes back here as the recommended changes with the before &rarr; after performance.</p>
 
 <h2>Step 1 — Single tower or cluster, and the existing radio configuration</h2>
-<button id="mode-single" onclick="setMode('single')">Single tower — Tower B</button>
-<button id="mode-cluster" onclick="setMode('cluster')">Cluster — Towers A + B + C</button>
+<button id="mode-single" onclick="setMode('single')">Single tower</button>
+<button id="mode-cluster" onclick="setMode('cluster')">Cluster — all towers</button>
+<p class="note hidden" id="singlePick" style="margin:6px 0"><b>Which tower:</b> <span id="singleBtns"></span></p>
 <p class="note">Or load your own site file (same format as the site database export): <input type="file" id="sitesFile" accept=".csv,text/csv"></p>
 <textarea id="sitesCsv" rows="5"></textarea>
 <p class="note" id="sitesInfo"></p>
@@ -143,7 +144,8 @@ function loadLink(){
   catch (e) { showMsg('linkWarn', 'Link counters not loaded: ' + e.message + '.', 'err'); }
 }
 function pmInForce(){ try { return JSON.parse($('histJson').value) || {}; } catch (e) { return null; } }
-var MODE = 'cluster', FN = 'capacity', RESULT = null;
+var MODE = 'cluster', FN = 'capacity', RESULT = null, SINGLE = 'B';
+function setSingle(k){ SINGLE = k; showMsg('pkgMsg', ''); renderConfig(); }
 
 function $(id){ return document.getElementById(id); }
 function esc(s){
@@ -184,7 +186,7 @@ function parseSites(){
 function activeSites(){
   var s = parseSites();
   if (MODE === 'single') {
-    var b = s.filter(function(v){ return v.key === 'B'; });
+    var b = s.filter(function(v){ return v.key === SINGLE; });
     return b.length ? b : s.slice(0, 1);
   }
   return s;
@@ -196,8 +198,14 @@ function siteIssues(s){
   return { unknown: unknown, hasPm: noPm.length < s.length, noPm: noPm };
 }
 function renderConfig_(){
+  var all = parseSites();
+  if (all.length && !all.some(function(v){ return v.key === SINGLE; })) SINGLE = all[0].key;
+  $('singlePick').className = (MODE === 'single') ? 'note' : 'note hidden';
+  $('singleBtns').innerHTML = all.map(function(v){
+    return '<button data-k="' + esc(v.key) + '" class="' + (v.key === SINGLE ? 'sel' : '') + '">Tower ' + esc(v.name) + '</button>';
+  }).join('');
   var s = activeSites();
-  $('sitesInfo').textContent = s.length + (MODE === 'single' ? ' site in force (single-tower mode)' : ' sites in force (cluster mode)') + '.';
+  $('sitesInfo').textContent = s.length + (MODE === 'single' ? ' site in force (single-tower mode: Tower ' + (s[0] ? s[0].name : '—') + ')' : ' sites in force (cluster mode)') + '.';
   var iss = siteIssues(s), w = [];
   if (iss.unknown.length)
     w.push('No study terrain or sector-share data for site(s) ' + iss.unknown.join(', ') +
@@ -342,6 +350,7 @@ function pickCounters(n){
   markCounters(n); counterSummary();
 }
 $('sitesCsv').addEventListener('input', renderConfig);
+$('singleBtns').addEventListener('click', function(e){ var b = e.target.closest('button[data-k]'); if (b) setSingle(b.getAttribute('data-k')); });
 $('allowDefaults').addEventListener('change', function(){ showMsg('pkgMsg', ''); });
 $('countersCsv').addEventListener('input', counterSummary);
 $('histJson').addEventListener('input', renderConfig);
