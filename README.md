@@ -129,6 +129,46 @@ gives the same result on either:
   Click the package cell (it starts `PACKAGE_JSON`), select all, paste, then
   Runtime > Run all. The result prints in the last cell.
 
+## Test data
+
+Everything in `data/` is test data, kept so any run can be repeated and give
+the same result. All results in the A1 and O1 test reports were made with it.
+None of it is live network data, and only Tower B's MCS histogram comes from a
+recording; the rest is made up. Results for Towers A and C show the method
+working, not findings about real cells.
+
+| File | What it is | Source | Used by |
+|---|---|---|---|
+| `counters/counters_busy_hour_congested.csv` | Counter scenario: busy hour, congested (PRB 94 %) | Made up | Test counters 1 on the console page |
+| `counters/counters_night_low_load.csv` | Counter scenario: night, low load (PRB 18 %) | Made up | Test counters 2 |
+| `counters/counters_edge_coverage_hole.csv` | Counter scenario: weak cell edge (RSRP -108 dBm) | Made up | Test counters 3 |
+| `counters/counters_urllc_heavy_slice.csv` | Counter scenario: URLLC-heavy slice mix | Made up | Test counters 4 |
+| `test_pm_mcs.csv` | MCS histogram per sector, Tower B | Recorded | MCS audit |
+| `test_pm_mcs_tower_A.csv`, `test_pm_mcs_tower_C.csv` | MCS histograms, Towers A and C | Dummy | MCS audit |
+| `test_pm_mcs_all_towers.csv` | The three histograms above in one file | Combined | MCS audit, cluster runs |
+| `pm_synth/pm_daily_counters.csv` | 62 days of daily cell KPIs (PRB, BLER, HARQ, rank, PHR) for Towers A, B, C | Synthetic, from `pm_synth/generate.py` | Energy congestion guard, BLER link audit |
+| `pm_synth/site_config.csv` | Cell configuration (azimuth, tilt, EIRP, P0) for the same cells | Synthetic | Link audit |
+
+Notes:
+
+- The four counter scenarios are also built into both pages, so the console
+  works without the files. Change a file and the page copy together.
+- The "study" counter set on the console page, one set per tower, is written
+  in the notebook (`STUDY_COUNTERS_BY_SITE`). Tower B's are the recorded
+  counters; Towers A and C use set values.
+- `pm_synth/generate.py` plants one problem per tower so the audits have
+  something to find: link adaptation on A, congestion on B, uplink power and
+  rank on C. It uses a fixed seed; run `python3 generate.py` to rebuild the
+  same files.
+- No real site names, IDs or coordinates are used.
+
+**Using real data:** don't overwrite these files. Upload your own CSV on the
+console page (the PM MCS-histogram box, or "your own CSV" for counters), or set
+`PM_CSV = "../data/<file>.csv"` in the notebook. Give real files distinct names,
+such as `pm_mcs_<site>_<date>.csv`. After any code change, rerun with the test
+data and compare with the test reports (for example, single Tower B gives 14 O1
+edits and 2 A1 policies). A changed number means the code changed a result.
+
 Synced with the full description: *Twin-in-the-Loop Optimisation as an rApp
 on a Virtual RIC*, v4, Nov 2026. Artefact v4, 17 Nov 2026.
 
