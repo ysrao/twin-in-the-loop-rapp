@@ -132,7 +132,7 @@ gives the same result on either:
 ## Test data
 
 Everything in `data/` is test data, kept so any run can be repeated and give
-the same result. All results in the A1 and O1 test reports were made with it.
+the same result. All results in the A1 and O1 test reports (below) were made with it.
 None of it is live network data, and only Tower B's MCS histogram comes from a
 recording; the rest is made up. Results for Towers A and C show the method
 working, not findings about real cells.
@@ -168,6 +168,20 @@ console page (the PM MCS-histogram box, or "your own CSV" for counters), or set
 such as `pm_mcs_<site>_<date>.csv`. After any code change, rerun with the test
 data and compare with the test reports (for example, single Tower B gives 14 O1
 edits and 2 A1 policies). A changed number means the code changed a result.
+
+## Test reports
+
+Results of the interface checks, run on a Mac on 17 Nov 2026 with the test data
+above, single towers first, then the cluster. Each report is in PDF (reads on
+GitHub) and Word.
+
+| Report | What it covers | Files |
+|---|---|---|
+| A1 interface test | The rApp's slice and energy policies sent to the O-RAN SC A1 simulator (A1-P v2): create, read back, status, delete, plus an invalid policy that must be rejected | [PDF](docs/test-reports/A1-interface-test-report.pdf) · [Word](docs/test-reports/A1-interface-test-report.docx) |
+| O1 interface test | The rApp's cell changes as O1 edits, checked against the 3GPP Rel-18 NR NRM YANG and a vendor stand-in module, plus two invalid edits that must be rejected | [PDF](docs/test-reports/O1-interface-test-report.pdf) · [Word](docs/test-reports/O1-interface-test-report.docx) |
+
+Neither check runs on Colab yet, and neither involves a live network element;
+each report's limits section says what it does not prove.
 
 Synced with the full description: *Twin-in-the-Loop Optimisation as an rApp
 on a Virtual RIC*, v4, Nov 2026. Artefact v4, 17 Nov 2026.
