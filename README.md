@@ -20,7 +20,8 @@ Open `notebook/rapp_run.ipynb` (Colab button on the landing page, or Jupyter
 locally). Change the three settings at the top of the settings cell and Run
 all; the result prints in the last cell:
 
-- `MODE` - "single" (Tower B) or "cluster" (Towers A + B + C)
+- `MODE` - "single" (one tower) or "cluster" (Towers A + B + C)
+- `SITE` - single mode only: "A", "B" or "C" (default "B")
 - `FUNCTION` - "capacity", "slice", "energy", "audit" or "all"
 - `COUNTER_SET` - "study", "test1", "test2", "test3", or "operator" (your own
   counter dump, edited into `OPERATOR_COUNTERS`)
