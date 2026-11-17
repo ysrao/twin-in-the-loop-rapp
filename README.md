@@ -180,7 +180,7 @@ GitHub) and Word.
 | A1 interface test | The rApp's slice and energy policies sent to the O-RAN SC A1 simulator (A1-P v2): create, read back, status, delete, plus an invalid policy that must be rejected | [PDF](docs/test-reports/A1-interface-test-report.pdf) · [Word](docs/test-reports/A1-interface-test-report.docx) |
 | O1 interface test | The rApp's cell changes as O1 edits, checked against the 3GPP Rel-18 NR NRM YANG and a vendor stand-in module, plus two invalid edits that must be rejected | [PDF](docs/test-reports/O1-interface-test-report.pdf) · [Word](docs/test-reports/O1-interface-test-report.docx) |
 
-Neither check runs on Colab yet, and neither involves a live network element;
+Neither check has been run on Colab yet, and neither involves a live network element;
 each report's limits section says what it does not prove.
 
 Synced with the full description: *Twin-in-the-Loop Optimisation as an rApp
