@@ -29,6 +29,7 @@ canvas{border:1px solid #ccc;border-radius:6px;max-width:100%}
 .maps figure{margin:0}
 h4{margin:14px 0 4px}
 .maps figcaption{font-size:14px;text-align:center;margin-top:4px}
+.tablewrap{overflow-x:auto}
 </style>
 </head>
 <body>
@@ -561,6 +562,30 @@ function renderResult(r){
         r.energy.per_site.map(function(p){ return '<tr><td>' + siteLabel(p.site) + '</td><td>' + fmt(p.prb_util, 0) + '</td><td>' + fmt(p.congested_days_pct, 0) + '</td><td>' + fmt(p.low_hours, 0) +
           '</td><td>' + esc(p.carriers) + '</td><td>' + (p.sleep ? 'yes' : '<b>no</b>') + '</td><td>' + fmt(p.index_after, 1) + '</td></tr>'; }).join('') +
         '</table><p class="note">Each tower is planned from its own counters. A tower at 85 % PRB use or more, or congested on 30 % of days or more in its link counters, keeps every carrier on.</p>';
+  }
+
+  if (r.a1) {
+    var A1 = r.a1, s1 = A1.sim;
+    x += '<h3>A1 check — slice and energy decisions as A1 policies</h3>';
+    x += '<p class="note">Each tower\'s slice profile and carrier-sleep plan is sent as an A1 policy (rApp-defined policy types ' +
+          esc(Object.keys(A1.policy_types || {}).join(', ')) + ') to the O-RAN SC A1 simulator, standing in for a Near-RT RIC. ' +
+          'It shows the policies are well-formed and accepted over A1 (create, read back, status, delete), and that an invalid policy is rejected; ' +
+          'the simulator only stores policies, so it says nothing about their effect on the network. Capacity, OLLA and P0 changes are O1 configuration changes and are not part of this check.</p>';
+    x += '<p>Schema check: <b>' + (A1.local_ok ? 'all policies valid' : 'invalid policies found') + '</b>' +
+          (s1 ? ' &middot; A1 exchange: <b>' + (s1.all_ok ? 'passed' : 'FAILED') + '</b> &middot; ' + esc(s1.endpoint) : '') + '</p>';
+    if (s1) {
+      x += '<div class="tablewrap"><table><tr><th>Policy</th><th>Type</th><th>Create</th><th>Read back</th><th>Status</th><th>Delete</th><th>Result</th></tr>' +
+        arr(s1.policies).map(function(p){
+          return '<tr><td>' + esc(p.policy_id) + '</td><td>' + esc(p.type) + '</td><td>' + esc(p.create) + '</td><td>' + esc(p.read_back) + (p.read_back_matches ? ' (same)' : ' (different)') +
+                 '</td><td>' + esc(p.status_code) + ' ' + esc(p.status || '') + '</td><td>' + esc(p.delete) + '</td><td>' + (p.ok ? 'OK' : '<b>FAILED</b>') + '</td></tr>';
+        }).join('') + '</table></div>';
+      x += '<p class="note">Invalid policy (' + esc(s1.negative.what) + '): HTTP ' + esc(s1.negative.http) + ' — ' + (s1.negative.rejected ? 'rejected, as it should be' : '<b>not rejected</b>') +
+            '. Status NOT_ENFORCED is the simulator\'s default: there is no Near-RT RIC behind it to enforce the policy.</p>';
+      x += '<details><summary class="note">The A1 policies sent</summary><pre style="white-space:pre-wrap;font-size:12px">' +
+            esc(arr(s1.policies).map(function(p){ return p.policy_id + '  (' + p.type + ')\n' + JSON.stringify(p.body, null, 1); }).join('\n\n')) + '</pre></details>';
+    } else if (A1.sim_error) {
+      x += '<p class="msg wrn">The A1 simulator was not run: ' + esc(A1.sim_error) + '. The schema check above still holds.</p>';
+    }
   }
   $('extraBox').innerHTML = x;
   $('resNotes').textContent = arr(r.notes).join(' ');

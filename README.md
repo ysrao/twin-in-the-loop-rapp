@@ -65,6 +65,29 @@ and energy tables - at the bottom of the page. Start it with
 The study network (a San Francisco 1 km tile, three towers, recorded
 counters) and the open city scene are built in.
 
+### A1 check (O-RAN SC A1 simulator)
+
+With `A1_CHECK = True` (the default) and a slice, energy or all run, each
+tower's slice profile and carrier-sleep plan is written as an A1 policy
+(rApp-defined policy types `TWIN_SlicePrbShares_1.0.0` and
+`TWIN_EnergyCarrierSleep_1.0.0`, in `rapp/a1_check.py`) and:
+
+1. checked against its type's JSON schema on the machine running the notebook;
+2. sent over A1-P v2 to the [O-RAN SC A1 simulator](https://docs.o-ran-sc.org/projects/o-ran-sc-sim-a1-interface/en/latest/)
+   (STD_2.0.0), standing in for a Near-RT RIC: create (201), read back (200,
+   unchanged), status (200), delete (204), plus one invalid policy (an eMBB share
+   of 1.5) that the simulator must reject (400).
+
+The notebook sets the simulator up itself, the same way on Colab and on a Mac,
+with no Docker: on first use it downloads a pinned commit of
+[o-ran-sc/sim-a1-interface](https://github.com/o-ran-sc/sim-a1-interface)
+(Apache-2.0), installs Flask 2.2.5 and connexion 2.14.2 into a folder of their
+own (`~/.cache/twin-rapp-a1sim`), and runs it on 127.0.0.1:2222 only for the
+length of the check. This shows the decisions are well-formed A1 policies an A1
+endpoint accepts; it says nothing about their effect on the network (the
+simulator only stores policies, so their status stays NOT_ENFORCED). Capacity,
+OLLA and P0 changes are O1 configuration changes and are not part of this check.
+
 ### The console page: Run on my Mac or Run on Colab
 
 The [console page](https://ysrao.github.io/twin-in-the-loop-rapp/rapp-run.html)
